@@ -1,0 +1,15 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Weavers xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="FodyWeavers.xsd">
+  <Costura>
+    <IncludeDebugSymbols>true</IncludeDebugSymbols>
+    <DisableCompression>true</DisableCompression>
+    <CreateTemporaryAssemblies>false</CreateTemporaryAssemblies>
+    <!-- Only exclude truly runtime-provided assemblies -->
+    <ExcludeAssemblies>
+			System
+			WindowsBase
+			PresentationCore
+			PresentationFramework
+		</ExcludeAssemblies>
+  </Costura>
+</Weavers>
