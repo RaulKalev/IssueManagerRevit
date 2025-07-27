@@ -10,6 +10,7 @@ using System.Reflection;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 
@@ -21,7 +22,7 @@ namespace IssueManager.Views
         public static Guid Guid => new Guid("F2F1F1F1-1F1F-1F1F-1F1F-1F1F1F1F1F1F");
         public static Guid Guid3 => new Guid("F3F1F1F1-1F1F-1F1F-1F1F-1F1F1F1F1F1F");
         private const string ConfigFilePath = @"C:\ProgramData\RK Tools\IssueManager\config.json";
-        private const string JiraConfigPath = @"C:\Users\mibil\OneDrive\Desktop\jira_config.json"; // ✅ Move this inside the class
+        private const string JiraConfigPath = @"C:\ProgramData\RK Tools\IssueManager\jira_config.json";
         private JiraService jiraService;
         private List<JiraUser> cachedUsers;
         private bool _isDarkMode = true;
@@ -30,6 +31,8 @@ namespace IssueManager.Views
         private Dictionary<string, List<JiraUser>> cachedAssignees = new Dictionary<string, List<JiraUser>>();
         private AppConfig appConfig = new AppConfig();
         private List<string> currentLabelFilters = new List<string>();
+        public JiraIssue CreatedIssue { get; private set; }
+        public ICommand ImageClickCommand { get; }
 
         public DockablePage2()
         {
@@ -37,6 +40,8 @@ namespace IssueManager.Views
             this.IsVisibleChanged += DockablePage2_IsVisibleChanged;
             LoadConfig(); // Load theme state before applying theme
             ThemeManager.IsDarkMode = _isDarkMode;
+            ImageClickCommand = new RelayCommand<object>(OnImageClicked);
+            DataContext = this;
 
             LoadTheme();
         }
@@ -153,6 +158,8 @@ namespace IssueManager.Views
                         return false;
                     }
                 };
+                JiraIssue.FilterCallback = ApplyCurrentFilters;
+
 
                 // Load projects
                 cachedProjects = await jiraService.GetProjectsAsync();
@@ -180,7 +187,7 @@ namespace IssueManager.Views
                 // Save to config file
                 var newConfig = new JiraService.JiraConfig
                 {
-                    baseUrl = "https://yourdomain.atlassian.net", // Optional: you can allow user to enter this too
+                    baseUrl = "https://eule.atlassian.net", // Optional: you can allow user to enter this too
                     email = window.Email,
                     apiToken = window.ApiKey
                 };
@@ -251,13 +258,20 @@ namespace IssueManager.Views
 
             SaveConfig();
         }
-
         private async void RefreshButton_Click(object sender, RoutedEventArgs e)
         {
             if (ProjectComboBox.SelectedItem is JiraProject selectedProject)
             {
+                Storyboard storyboard = (Storyboard)FindResource("RotateIconStoryboard");
+
                 try
                 {
+                    // Show rotating icon
+                    ConnectionStatusIcon.Kind = MaterialDesignThemes.Wpf.PackIconKind.Loading;
+                    ConnectionStatusIcon.Visibility = Visibility.Visible;
+                    ConnectionStatusIcon.Foreground = Brushes.Gray;
+                    storyboard.Begin(ConnectionStatusIcon, true);
+
                     var issues = await jiraService.GetProjectIssuesAsync(selectedProject.key);
 
                     // Reuse cached users
@@ -276,11 +290,25 @@ namespace IssueManager.Views
 
                     ApplyCurrentFilters();
 
+                    // ✅ Stop and change icon to checkmark
+                    storyboard.Stop(ConnectionStatusIcon);
+                    ConnectionStatusIcon.Kind = MaterialDesignThemes.Wpf.PackIconKind.CheckCircle;
+                    ConnectionStatusIcon.Foreground = Brushes.Green;
 
+                    // ✅ Auto-hide after 5 seconds
+                    await Task.Delay(5000);
+                    ConnectionStatusIcon.Visibility = Visibility.Collapsed;
                 }
                 catch (Exception ex)
                 {
+                    storyboard.Stop(ConnectionStatusIcon);
+                    ConnectionStatusIcon.Kind = MaterialDesignThemes.Wpf.PackIconKind.AlertCircle;
+                    ConnectionStatusIcon.Foreground = Brushes.Red;
 
+                    await Task.Delay(5000);
+                    ConnectionStatusIcon.Visibility = Visibility.Collapsed;
+
+                    MessageBox.Show($"Failed to refresh issues: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
         }
@@ -376,11 +404,15 @@ namespace IssueManager.Views
                  (issue.Labels != null && issue.Labels.Any(label => currentLabelFilters.Contains(label))))
             ).ToList();
 
-            IssueCardsPanel.ItemsSource = filtered;
-        }
+            IssueCardsPanel.ItemsSource = filtered
+            .OrderBy(issue => issue.PriorityRank)
+            .ThenBy(issue => issue.CreatedDate ?? DateTime.MaxValue)
+            .ToList();
 
+        }
         private async void CreateTaskButton_Click(object sender, RoutedEventArgs e)
         {
+            var priorities = new List<string> { "Highest", "High", "Medium", "Low", "Lowest" };
             var selectedProject = ProjectComboBox.SelectedItem as JiraProject;
             if (selectedProject == null)
             {
@@ -388,13 +420,10 @@ namespace IssueManager.Views
                 return;
             }
 
-            // Cache or load projects
             if (cachedProjects == null)
                 cachedProjects = await jiraService.GetProjectsAsync();
 
-            // Cache or load assignees for this project
-            List<JiraUser> assignees;
-            if (!cachedAssignees.TryGetValue(selectedProject.key, out assignees))
+            if (!cachedAssignees.TryGetValue(selectedProject.key, out var assignees))
             {
                 assignees = await jiraService.GetProjectUsersAsync(selectedProject.key);
                 cachedAssignees[selectedProject.key] = assignees;
@@ -403,10 +432,26 @@ namespace IssueManager.Views
             var assigneeNames = assignees.Select(a => a.DisplayName).ToList();
             var projectKeys = cachedProjects.Select(p => p.key).ToList();
 
-            var createWindow = new CreateTaskWindow(jiraService, selectedProject.key, projectKeys, assigneeNames);
-            createWindow.Owner = Window.GetWindow(this);
-            createWindow.Show();
+            CreateTaskWindow.ShowOrActivate(
+                jiraService,
+                selectedProject.key,
+                projectKeys,
+                assigneeNames,
+                priorities,
+                allLoadedIssues, // ✅ pass this in as the new parameter
+                async created =>
+                {
+                    created.Priority = created.Priority ?? "Medium";
+                    created.AllAssignees = cachedUsers ?? new List<JiraUser>();
+                    created.AllStatuses = await jiraService.GetIssueStatusesAsync(created.Key);
+
+                    allLoadedIssues.Add(created);
+                    ApplyCurrentFilters();
+                });
+
         }
+
+
         private async void CheckBox_Click(object sender, RoutedEventArgs e)
         {
             var checkbox = sender as CheckBox;
@@ -432,6 +477,26 @@ namespace IssueManager.Views
                     MessageBox.Show($"Failed to mark issue {issue.Key} as Done.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     checkbox.IsChecked = false; // Roll back if failed
                 }
+            }
+        }
+        private void OnImageClicked(object parameter)
+        {
+            if (parameter is JiraIssue issue)
+            {
+
+                if (!string.IsNullOrEmpty(issue.Description) && issue.Description.Contains("[SECTION_BOX]"))
+                {
+                    ServiceRegistry.ApplySectionBoxHandler?.SetTarget(issue.Description);
+                    ServiceRegistry.ApplySectionBoxEvent?.Raise();
+                }
+                else
+                {
+                    TaskDialog.Show("Debug", "No section box metadata found.");
+                }
+            }
+            else
+            {
+                TaskDialog.Show("Error", "Invalid issue parameter in OnImageClicked.");
             }
         }
 

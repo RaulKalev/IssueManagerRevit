@@ -12,7 +12,6 @@
     Foreground="{DynamicResource ForegroundBrush}"
     ResizeMode="NoResize"
     SizeToContent="WidthAndHeight"
-    WindowStartupLocation="CenterScreen"
     WindowStyle="None">
     <Window.Resources>
         <ResourceDictionary>

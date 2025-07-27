@@ -7,6 +7,7 @@
     xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:models="clr-namespace:IssueManager.Models"
+    xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
     Title="TitleNameTest"
     d:DesignHeight="450"
     d:DesignWidth="800"
@@ -40,7 +41,71 @@
                     Duration="0:0:1" />
             </Storyboard>
 
+            <Style x:Key="CustomCheckComboBoxStyle" TargetType="xctk:CheckComboBox">
+                <Setter Property="Background" Value="{DynamicResource SecondaryBackgroundBrush}" />
+                <Setter Property="BorderBrush" Value="Gray" />
+                <Setter Property="BorderThickness" Value="0.6" />
+                <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}" />
+                <Setter Property="Height" Value="20" />
+                <Setter Property="Padding" Value="4,0,4,0" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="xctk:CheckComboBox">
+                            <Grid>
+                                <!--  Toggle Button  -->
+                                <ToggleButton
+                                    x:Name="ToggleButton"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    FocusVisualStyle="{x:Null}"
+                                    Foreground="{TemplateBinding Foreground}"
+                                    IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                    <ContentPresenter
+                                        Margin="{TemplateBinding Padding}"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Center"
+                                        Content="{TemplateBinding Text}" />
+                                </ToggleButton>
 
+                                <!--  Dropdown  -->
+                                <Popup
+                                    x:Name="Popup"
+                                    AllowsTransparency="True"
+                                    Focusable="False"
+                                    IsOpen="{TemplateBinding IsDropDownOpen}"
+                                    Placement="Bottom"
+                                    StaysOpen="False">
+                                    <Border
+                                        Width="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
+                                        Background="{DynamicResource SecondaryBackgroundBrush}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}">
+                                        <ScrollViewer>
+                                            <ItemsPresenter />
+                                        </ScrollViewer>
+                                    </Border>
+                                </Popup>
+                            </Grid>
+
+                            <!--  Triggers  -->
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Foreground" Value="Gray" />
+                                </Trigger>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="ToggleButton" Property="Background" Value="{DynamicResource HighlightBrush}" />
+                                    <Setter TargetName="ToggleButton" Property="BorderBrush" Value="{DynamicResource HighlightBrush}" />
+                                </Trigger>
+                                <Trigger Property="IsDropDownOpen" Value="True">
+                                    <Setter TargetName="ToggleButton" Property="Background" Value="{DynamicResource HighlightBrush}" />
+                                    <Setter TargetName="ToggleButton" Property="BorderBrush" Value="{DynamicResource HighlightBrush}" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
             <!--  Custom Style for DataGrid Header  -->
             <Style x:Key="CustomDataGridColumnHeaderStyle" TargetType="{x:Type DataGridColumnHeader}">
                 <Setter Property="Background" Value="{DynamicResource SecondaryBackgroundBrush}" />
@@ -556,7 +621,7 @@
                     <ComboBox
                         x:Name="ProjectComboBox"
                         Grid.Column="2"
-                        Width="175"
+                        Width="150"
                         SelectionChanged="ProjectComboBox_SelectionChanged"
                         Style="{StaticResource DarkThemeComboBox}"
                         ToolTip="Vali projekt"
@@ -657,6 +722,7 @@
                     </ToggleButton>
                 </Grid>
             </Border>
+
             <!--  ✅ Scrollable Issue Cards (Row 1)  -->
             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
 
@@ -681,19 +747,34 @@
                                     <StackPanel Grid.Column="0" Margin="0,0,10,0">
                                         <!--  Summary (read-only)  -->
                                         <StackPanel HorizontalAlignment="Left" Orientation="Horizontal">
+                                            <!--  Display Summary when not editing  -->
                                             <TextBlock
+                                                MinWidth="150"
+                                                MaxWidth="150"
                                                 FontSize="14"
                                                 FontWeight="Bold"
                                                 Foreground="{DynamicResource ForegroundBrush}"
-                                                Text="{Binding Summary}" />
+                                                Text="{Binding Summary}"
+                                                TextWrapping="Wrap"
+                                                Visibility="{Binding IsEditing, Converter={StaticResource InverseBoolToVisibilityConverter}}" />
+
+                                            <!--  Editable Summary TextBox  -->
+                                            <TextBox
+                                                MaxWidth="150"
+                                                Margin="0,2,0,4"
+                                                FontSize="14"
+                                                Style="{DynamicResource CustomTextBoxStyle}"
+                                                Text="{Binding Summary, UpdateSourceTrigger=PropertyChanged}"
+                                                Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibilityConverter}}" />
 
                                             <ToggleButton
-                                                Grid.Column="4"
+                                                Grid.Column="0"
                                                 Width="19"
                                                 Height="19"
                                                 Margin="10,0,0,0"
                                                 Command="{Binding ToggleEditCommand}"
-                                                Content="{Binding IsEditing, Converter={StaticResource BoolToEditSaveConverter}}">
+                                                Content="{Binding IsEditing, Converter={StaticResource BoolToEditSaveConverter}}"
+                                                ToolTip="Muuda">
 
                                                 <ToggleButton.Template>
                                                     <ControlTemplate TargetType="ToggleButton">
@@ -726,21 +807,18 @@
                                                     </ControlTemplate>
                                                 </ToggleButton.Template>
                                             </ToggleButton>
-                                            <CheckBox
-                                                Margin="10,-2,0,0"
-                                                VerticalAlignment="Center"
-                                                Click="CheckBox_Click"
-                                                Content="{Binding Name}"
-                                                IsChecked="{Binding IsChecked, Mode=TwoWay}"
-                                                Style="{StaticResource CustomCheckboxStyle}"
-                                                ToolTip="Märgi tehtuks" />
+
+
+
+
+
                                         </StackPanel>
 
                                         <!--  Description  -->
                                         <TextBlock
                                             Margin="0,5,0,5"
                                             Foreground="{DynamicResource ForegroundBrush}"
-                                            Text="{Binding Description}"
+                                            Text="{Binding CleanDescription}"
                                             TextWrapping="Wrap"
                                             Visibility="{Binding IsEditing, Converter={StaticResource InverseBoolToVisibilityConverter}}" />
                                         <TextBox
@@ -749,80 +827,201 @@
                                             AcceptsReturn="True"
                                             Foreground="{DynamicResource ForegroundBrush}"
                                             Style="{DynamicResource CustomTextBoxStyle}"
-                                            Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}"
+                                            Text="{Binding EditableDescription, UpdateSourceTrigger=PropertyChanged}"
                                             TextWrapping="Wrap"
                                             Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibilityConverter}}" />
 
+
                                         <!--  Assignee  -->
-                                        <TextBlock
-                                            FontWeight="SemiBold"
-                                            Foreground="{DynamicResource ForegroundBrush}"
-                                            Text="Assigned to:" />
-                                        <TextBlock
-                                            Foreground="{DynamicResource ForegroundBrush}"
-                                            Text="{Binding Assignee}"
-                                            Visibility="{Binding IsEditing, Converter={StaticResource InverseBoolToVisibilityConverter}}" />
-                                        <ComboBox
-                                            DisplayMemberPath="DisplayName"
-                                            ItemsSource="{Binding AllAssignees}"
-                                            SelectedValue="{Binding AssigneeAccountId}"
-                                            SelectedValuePath="AccountId"
-                                            Style="{StaticResource DarkThemeComboBox}"
-                                            Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibilityConverter}}" />
-
+                                        <StackPanel HorizontalAlignment="Left" Orientation="Horizontal">
+                                            <TextBlock
+                                                Margin="0,0,3,0"
+                                                FontSize="10"
+                                                FontWeight="SemiBold"
+                                                Foreground="{DynamicResource ForegroundBrush}"
+                                                Text="Määratud isik:" />
+                                            <TextBlock
+                                                FontSize="10"
+                                                Foreground="{DynamicResource ForegroundBrush}"
+                                                Text="{Binding Assignee}"
+                                                Visibility="{Binding IsEditing, Converter={StaticResource InverseBoolToVisibilityConverter}}" />
+                                            <ComboBox
+                                                Width="150"
+                                                Height="15"
+                                                VerticalContentAlignment="Top"
+                                                DisplayMemberPath="DisplayName"
+                                                FontSize="10"
+                                                ItemsSource="{Binding AllAssignees}"
+                                                SelectedValue="{Binding AssigneeAccountId}"
+                                                SelectedValuePath="AccountId"
+                                                Style="{StaticResource DarkThemeComboBox}"
+                                                Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                        </StackPanel>
                                         <!--  Reporter (read-only)  -->
-                                        <TextBlock
-                                            Margin="0,5,0,0"
-                                            FontSize="10"
-                                            FontWeight="SemiBold"
-                                            Foreground="{DynamicResource ForegroundBrush}"
-                                            Text="Created by:" />
-                                        <TextBlock
-                                            FontSize="10"
-                                            Foreground="{DynamicResource ForegroundBrush}"
-                                            Text="{Binding Reporter}" />
+                                        <StackPanel HorizontalAlignment="Left" Orientation="Horizontal">
+                                            <TextBlock
+                                                Margin="0,0,3,0"
+                                                FontSize="10"
+                                                FontWeight="SemiBold"
+                                                Foreground="{DynamicResource ForegroundBrush}"
+                                                Text="Loodud:" />
+                                            <TextBlock
+                                                FontSize="10"
+                                                Foreground="{DynamicResource ForegroundBrush}"
+                                                Text="{Binding Reporter}" />
+                                        </StackPanel>
 
-                                        <!--  Status  -->
                                         <TextBlock
-                                            Margin="0,5,0,0"
-                                            FontWeight="Bold"
-                                            Foreground="{DynamicResource TextHighlightBrush}"
-                                            Text="{Binding StatusCategory}"
-                                            Visibility="{Binding IsEditing, Converter={StaticResource InverseBoolToVisibilityConverter}}" />
-                                        <ComboBox
-                                            ItemsSource="{Binding AllStatuses}"
-                                            SelectedItem="{Binding StatusCategory}"
-                                            Style="{StaticResource DarkThemeComboBox}"
-                                            Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibilityConverter}}" />
-                                        <TextBlock
-                                            Margin="0,4,0,0"
+                                            Margin="0,0,0,0"
                                             FontStyle="Italic"
                                             Foreground="Gray"
                                             Text="{Binding LabelsText}" />
+                                        <xctk:CheckComboBox
+                                            Height="25"
+                                            Margin="0,4,0,0"
+                                            ItemsSource="{Binding AllLabels}"
+                                            SelectedItemsOverride="{Binding Labels}"
+                                            Style="{StaticResource CustomCheckComboBoxStyle}"
+                                            Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibilityConverter}}" />
 
+                                        <Grid
+                                            Grid.ColumnSpan="2"
+                                            Margin="0,0,0,0"
+                                            HorizontalAlignment="Center">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <!--  Tegemisel  -->
+                                            <StackPanel
+                                                Grid.Column="1"
+                                                Margin="0,0,0,0"
+                                                HorizontalAlignment="Center"
+                                                Orientation="Horizontal">
+                                                <TextBlock
+                                                    Margin="0,0,0,0"
+                                                    VerticalAlignment="Center"
+                                                    FontSize="10"
+                                                    FontWeight="SemiBold"
+                                                    Foreground="{DynamicResource ForegroundBrush}"
+                                                    Text="Tegemisel" />
+                                                <CheckBox
+                                                    VerticalAlignment="Center"
+                                                    IsChecked="{Binding IsInProgress, Mode=TwoWay}"
+                                                    Style="{StaticResource CustomCheckboxStyle}"
+                                                    ToolTip="Märgi tegemisel" />
+                                            </StackPanel>
+
+                                            <!--  Tehtud  -->
+                                            <StackPanel
+                                                Grid.Column="2"
+                                                Margin="0,0,0,0"
+                                                HorizontalAlignment="Center"
+                                                Orientation="Horizontal">
+                                                <TextBlock
+                                                    Margin="0,0,0,0"
+                                                    VerticalAlignment="Center"
+                                                    FontSize="10"
+                                                    FontWeight="SemiBold"
+                                                    Foreground="{DynamicResource ForegroundBrush}"
+                                                    Text="Tehtud" />
+                                                <CheckBox
+                                                    VerticalAlignment="Center"
+                                                    IsChecked="{Binding IsDone, Mode=TwoWay}"
+                                                    Style="{StaticResource CustomCheckboxStyle}"
+                                                    ToolTip="Märgi tehtuks" />
+                                            </StackPanel>
+
+
+                                        </Grid>
 
                                     </StackPanel>
 
                                     <!--  RIGHT: Images  -->
-                                    <StackPanel Grid.Column="1" Orientation="Vertical">
-                                        <ItemsControl ItemsSource="{Binding ImageBitmaps}">
-                                            <ItemsControl.ItemsPanel>
-                                                <ItemsPanelTemplate>
-                                                    <StackPanel Orientation="Vertical" />
-                                                </ItemsPanelTemplate>
-                                            </ItemsControl.ItemsPanel>
+                                    <StackPanel
+                                        Grid.Column="1"
+                                        Margin="0,0,0,0"
+                                        Orientation="Vertical">
+                                        <StackPanel
+                                            Grid.Column="1"
+                                            Margin="10,0,0,0"
+                                            HorizontalAlignment="Right"
+                                            Orientation="Horizontal">
+                                            <TextBlock
+                                                Margin="0,0,5,0"
+                                                VerticalAlignment="Center"
+                                                FontFamily="Segoe UI Symbol"
+                                                FontSize="14"
+                                                FontWeight="Bold"
+                                                Foreground="{Binding PriorityColor}"
+                                                Text="{Binding PriorityIcon}"
+                                                Visibility="{Binding IsEditing, Converter={StaticResource InverseBoolToVisibilityConverter}}" />
+                                            <TextBlock
+                                                VerticalAlignment="Center"
+                                                FontSize="14"
+                                                Foreground="{Binding PriorityColor}"
+                                                Text="{Binding Priority}"
+                                                Visibility="{Binding IsEditing, Converter={StaticResource InverseBoolToVisibilityConverter}}" />
+                                            <ComboBox
+                                                Width="100"
+                                                VerticalAlignment="Center"
+                                                FontSize="12"
+                                                ItemsSource="{Binding PriorityOptions}"
+                                                SelectedItem="{Binding Priority, UpdateSourceTrigger=PropertyChanged}"
+                                                Style="{StaticResource DarkThemeComboBox}"
+                                                Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                        </StackPanel>
+                                        <ItemsControl ItemsSource="{Binding ImageWithIssues}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Image
+                                                    <Grid
                                                         Width="100"
                                                         Height="100"
-                                                        Margin="0,0,0,5"
-                                                        Source="{Binding}"
-                                                        Stretch="Uniform" />
+                                                        Margin="0,0,0,5">
+                                                        <Image
+                                                            Width="100"
+                                                            Height="100"
+                                                            Source="{Binding Image}"
+                                                            Stretch="Uniform" />
+                                                        <Button
+                                                            Background="Transparent"
+                                                            BorderThickness="0"
+                                                            Command="{Binding DataContext.ImageClickCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                            CommandParameter="{Binding Issue}"
+                                                            Cursor="Hand"
+                                                            ToolTip="Click to apply section box (if available)">
+                                                            <Button.Style>
+                                                                <Style BasedOn="{StaticResource {x:Type Button}}" TargetType="Button">
+                                                                    <Setter Property="Background" Value="Transparent" />
+                                                                    <Setter Property="Template">
+                                                                        <Setter.Value>
+                                                                            <ControlTemplate TargetType="Button">
+                                                                                <Border Background="{TemplateBinding Background}">
+                                                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                                </Border>
+                                                                                <ControlTemplate.Triggers>
+                                                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                                                        <Setter Property="Background" Value="Transparent" />
+                                                                                        <!--  Light overlay  -->
+                                                                                    </Trigger>
+                                                                                    <Trigger Property="IsPressed" Value="True">
+                                                                                        <Setter Property="Background" Value="Transparent" />
+                                                                                        <!--  Stronger overlay  -->
+                                                                                    </Trigger>
+                                                                                </ControlTemplate.Triggers>
+                                                                            </ControlTemplate>
+                                                                        </Setter.Value>
+                                                                    </Setter>
+                                                                </Style>
+                                                            </Button.Style>
+                                                        </Button>
+
+                                                    </Grid>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
-
 
                                     </StackPanel>
                                 </Grid>

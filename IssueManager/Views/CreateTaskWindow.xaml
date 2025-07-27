@@ -4,14 +4,15 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="clr-namespace:IssueManager"
     xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+    xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
     Title="Create New Task"
+    Width="250"
     AllowsTransparency="True"
     Background="Transparent"
     Foreground="{DynamicResource ForegroundBrush}"
     ResizeMode="NoResize"
     SizeToContent="WidthAndHeight"
     Topmost="True"
-    WindowStartupLocation="CenterScreen"
     WindowStyle="None">
     <Window.Resources>
         <ResourceDictionary>
@@ -24,7 +25,113 @@
                 <ResourceDictionary Source="/IssueManager;component/Views/Themes/LightTheme.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
+            <!--  Custom ActionButtonStyle  -->
+            <Style x:Key="CustomActionButtonStyle" TargetType="{x:Type Button}">
+                <Setter Property="Width" Value="200" />
+                <Setter Property="Height" Value="50" />
+                <Setter Property="Margin" Value="0,5,0,0" />
+                <Setter Property="HorizontalAlignment" Value="Center" />
+                <Setter Property="Background" Value="{DynamicResource PrimaryBackgroundBrush}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+                <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}" />
+                <Setter Property="FontSize" Value="16" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="{x:Type Button}">
+                            <Border
+                                x:Name="ButtonBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="5">
+                                <ContentPresenter
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Content="{TemplateBinding Content}" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <!--  Hover Effect  -->
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource SecondaryBackgroundBrush}" />
+                                    <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="{DynamicResource IconHoverBrush}" />
+                                </Trigger>
+                                <!--  Pressed Effect  -->
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource IconHoverBrush}" />
+                                    <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
 
+            <Style x:Key="CustomCheckComboBoxStyle" TargetType="xctk:CheckComboBox">
+                <Setter Property="Background" Value="{DynamicResource SecondaryBackgroundBrush}" />
+                <Setter Property="BorderBrush" Value="Gray" />
+                <Setter Property="BorderThickness" Value="0.6" />
+                <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}" />
+                <Setter Property="Height" Value="20" />
+                <Setter Property="Padding" Value="4,0,4,0" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="xctk:CheckComboBox">
+                            <Grid>
+                                <!--  Toggle Button  -->
+                                <ToggleButton
+                                    x:Name="ToggleButton"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    FocusVisualStyle="{x:Null}"
+                                    Foreground="{TemplateBinding Foreground}"
+                                    IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                    <ContentPresenter
+                                        Margin="{TemplateBinding Padding}"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Center"
+                                        Content="{TemplateBinding Text}" />
+                                </ToggleButton>
+
+                                <!--  Dropdown  -->
+                                <Popup
+                                    x:Name="Popup"
+                                    AllowsTransparency="True"
+                                    Focusable="False"
+                                    IsOpen="{TemplateBinding IsDropDownOpen}"
+                                    Placement="Bottom"
+                                    StaysOpen="False">
+                                    <Border
+                                        Width="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
+                                        Background="{DynamicResource SecondaryBackgroundBrush}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}">
+                                        <ScrollViewer>
+                                            <ItemsPresenter />
+                                        </ScrollViewer>
+                                    </Border>
+                                </Popup>
+                            </Grid>
+
+                            <!--  Triggers  -->
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Foreground" Value="Gray" />
+                                </Trigger>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="ToggleButton" Property="Background" Value="{DynamicResource HighlightBrush}" />
+                                    <Setter TargetName="ToggleButton" Property="BorderBrush" Value="{DynamicResource HighlightBrush}" />
+                                </Trigger>
+                                <Trigger Property="IsDropDownOpen" Value="True">
+                                    <Setter TargetName="ToggleButton" Property="Background" Value="{DynamicResource HighlightBrush}" />
+                                    <Setter TargetName="ToggleButton" Property="BorderBrush" Value="{DynamicResource HighlightBrush}" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
 
             <!--  Custom Style for DataGrid Header  -->
             <Style x:Key="CustomDataGridColumnHeaderStyle" TargetType="{x:Type DataGridColumnHeader}">
@@ -455,48 +562,101 @@
                         Height="25"
                         Style="{DynamicResource DarkThemeComboBox}" />
 
-                    <TextBlock Margin="0,10,0,5" Text="Task Name:" />
+                    <TextBlock Margin="0,10,0,5" Text="Ülesande nimi:" />
                     <TextBox
                         x:Name="TaskNameTextBox"
                         Height="25"
+                        MinWidth="200"
+                        MaxWidth="200"
                         Style="{DynamicResource CustomTextBoxStyle}" />
 
-                    <TextBlock Margin="0,10,0,5" Text="Task Description:" />
+                    <TextBlock Margin="0,10,0,5" Text="Ülesande kirjeldus:" />
                     <TextBox
                         x:Name="TaskDescriptionTextBox"
                         Height="100"
+                        MinWidth="200"
+                        MaxWidth="200"
                         AcceptsReturn="True"
                         Style="{DynamicResource CustomTextBoxStyle}"
                         TextWrapping="Wrap" />
 
-                    <TextBlock Margin="0,10,0,5" Text="Assignee:" />
+                    <TextBlock Margin="0,10,0,5" Text="Määratud isik:" />
                     <ComboBox
                         x:Name="AssigneeComboBox"
                         Height="25"
                         Style="{DynamicResource DarkThemeComboBox}" />
+                    <StackPanel Margin="0,10,0,0">
+                        <TextBlock Margin="0,0,0,4" Text="Prioriteet:" />
+                        <ComboBox
+                            x:Name="PriorityComboBox"
+                            Height="25"
+                            Style="{DynamicResource DarkThemeComboBox}" />
+
+                    </StackPanel>
+
+                    <StackPanel>
+                        <TextBlock Margin="0,10,0,5" Text="Silt:" />
+                        <xctk:CheckComboBox
+                            x:Name="LabelSelector"
+                            Height="25"
+                            Margin="0,0,0,10"
+                            ItemsSource="{Binding AvailableLabels}"
+                            SelectedItemsOverride="{Binding SelectedLabels}"
+                            Style="{StaticResource CustomCheckComboBoxStyle}" />
+
+                    </StackPanel>
+
+                    <StackPanel HorizontalAlignment="Center">
+                        <Image
+                            x:Name="CapturedImagePreview"
+                            Width="200"
+                            Height="200"
+                            Margin="0,10,0,0"
+                            HorizontalAlignment="Center"
+                            Stretch="Uniform"
+                            Visibility="Visible" />
+
+                    </StackPanel>
+
+
                 </StackPanel>
 
                 <!--  Buttons  -->
                 <StackPanel
                     Grid.Row="2"
-                    HorizontalAlignment="Right"
-                    Orientation="Horizontal">
+                    Margin="0,-10,0,0"
+                    HorizontalAlignment="Center"
+                    Orientation="Vertical">
                     <Button
-                        Width="80"
-                        Margin="0,10,10,0"
-                        Click="Cancel_Click"
-                        Content="Tühista"
-                        FontSize="18"
+                        Width="200"
+                        Height="25"
+                        Margin="0,0,0,20"
+                        Click="Ristumine_Click"
+                        Content="Loo Ristumine"
+                        FontSize="14"
                         FontWeight="Bold"
-                        Style="{DynamicResource CustomActionButtonStyle1}" />
-                    <Button
-                        Width="80"
-                        Margin="0,10,0,0"
-                        Click="Create_Click"
-                        Content="Loo"
-                        FontSize="18"
-                        FontWeight="Bold"
-                        Style="{DynamicResource CustomActionButtonStyle2}" />
+                        Style="{DynamicResource CustomActionButtonStyle}" />
+                    <StackPanel
+                        Grid.Row="2"
+                        HorizontalAlignment="Center"
+                        Orientation="Horizontal">
+                        <Button
+                            Width="80"
+                            Margin="0,0,10,0"
+                            Click="Cancel_Click"
+                            Content="Tühista"
+                            FontSize="18"
+                            FontWeight="Bold"
+                            Style="{DynamicResource CustomActionButtonStyle1}" />
+                        <Button
+                            Width="80"
+                            Margin="0,0,0,0"
+                            Click="Create_Click"
+                            Content="Loo"
+                            FontSize="18"
+                            FontWeight="Bold"
+                            Style="{DynamicResource CustomActionButtonStyle2}" />
+                    </StackPanel>
                 </StackPanel>
             </Grid>
         </Border>

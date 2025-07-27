@@ -3,7 +3,9 @@ using IssueManager.Models;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -121,7 +123,7 @@ namespace IssueManager.Services
                 client.BaseAddress = new Uri(baseUrl);
 
                 string jql = $"project={projectKey}";
-                var response = await client.GetAsync($"/rest/api/3/search?jql={Uri.EscapeDataString(jql)}&fields=summary,description,assignee,reporter,status,attachment,labels");
+                var response = await client.GetAsync($"/rest/api/3/search?jql={Uri.EscapeDataString(jql)}&fields=summary,description,assignee,reporter,status,attachment,labels,priority");
 
                 response.EnsureSuccessStatusCode();
 
@@ -203,6 +205,11 @@ namespace IssueManager.Services
                             ? nameElem.GetString()
                             : null;
 
+                        string priority = fields.TryGetProperty("priority", out var priorityElem) &&
+                             priorityElem.TryGetProperty("name", out var prioName)
+                             ? prioName.GetString()
+                             : null;
+
                         List<string> labels = new List<string>();
                         if (fields.TryGetProperty("labels", out var labelsElem) && labelsElem.ValueKind == JsonValueKind.Array)
                         {
@@ -212,9 +219,22 @@ namespace IssueManager.Services
                                     labels.Add(label.GetString());
                             }
                         }
+                        DateTime? createdDate = fields.TryGetProperty("created", out var createdElem)
+                            ? createdElem.GetDateTime()
+                            : (DateTime?)null;
 
+                        // ✅ Parse and clone ADF description safely before the JsonDocument is disposed
+                        JsonElement descRaw;
+                        string originalDescriptionADF = null;
+                        JsonElement? originalADFJson = null;
 
-                        issues.Add(new JiraIssue
+                        if (fields.TryGetProperty("description", out descRaw))
+                        {
+                            originalDescriptionADF = descRaw.ToString();
+                            originalADFJson = JsonDocument.Parse(descRaw.GetRawText()).RootElement.Clone();
+                        }
+
+                        var jiraIssue = new JiraIssue
                         {
                             Key = issue.GetProperty("key").GetString(),
                             Summary = fields.GetProperty("summary").GetString(),
@@ -225,10 +245,40 @@ namespace IssueManager.Services
                             StatusCategory = statusCategory,
                             ImageUrls = imageUrls,
                             ImageBitmaps = imageBitmaps,
-                            Labels = labels // ✅ Add this line
-                        });
+                            Labels = new ObservableCollection<string>(labels),
+                            CreatedDate = createdDate,
+                            Priority = priority,
+                            OriginalDescriptionADF = originalDescriptionADF,
+                            OriginalADFJson = originalADFJson
+                        };
+
+                        // ✅ Populate ImageWithIssues for image click command
+                        jiraIssue.ImageWithIssues = new ObservableCollection<ImageWithIssue>();
+                        foreach (var img in imageBitmaps)
+                        {
+                            jiraIssue.ImageWithIssues.Add(new ImageWithIssue
+                            {
+                                Image = img,
+                                Issue = jiraIssue
+                            });
+                        }
+
+                        issues.Add(jiraIssue);
+
 
                     }
+                }
+                // ✅ Populate AllLabels for each issue based on all distinct labels across all issues
+                var distinctLabels = new HashSet<string>();
+                foreach (var issue in issues)
+                {
+                    foreach (var label in issue.Labels)
+                        distinctLabels.Add(label);
+                }
+
+                foreach (var issue in issues)
+                {
+                    issue.AllLabels = new ObservableCollection<string>(distinctLabels);
                 }
 
                 return issues;
@@ -243,31 +293,35 @@ namespace IssueManager.Services
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", auth);
                 client.BaseAddress = new Uri(baseUrl);
 
-                // ---------- 1. Prepare issue fields (description, assignee) ----------
+                // ---------- 1. Prepare issue fields (summary, description, assignee, priority, labels) ----------
                 var fields = new Dictionary<string, object>();
 
-                if (!string.IsNullOrEmpty(issue.Description))
+                if (!string.IsNullOrEmpty(issue.Summary))
                 {
-                    fields["description"] = new
-                    {
-                        type = "doc",
-                        version = 1,
-                        content = new object[]
-                        {
-                    new {
-                        type = "paragraph",
-                        content = new object[]
-                        {
-                            new { type = "text", text = issue.Description }
-                        }
-                    }
-                        }
-                    };
+                    fields["summary"] = issue.Summary;
                 }
+
+                // Update description only if it changed and OriginalADFJson is available
+                if (!string.IsNullOrWhiteSpace(issue.Description) && issue.OriginalADFJson.HasValue)
+                {
+                    var updatedADF = UpdateTextInADF(issue.OriginalADFJson.Value, issue.Description);
+                    fields["description"] = updatedADF;
+                }
+
 
                 if (!string.IsNullOrEmpty(issue.AssigneeAccountId))
                 {
                     fields["assignee"] = new { accountId = issue.AssigneeAccountId };
+                }
+
+                if (!string.IsNullOrEmpty(issue.Priority))
+                {
+                    fields["priority"] = new { name = issue.Priority };
+                }
+
+                if (issue.Labels != null)
+                {
+                    fields["labels"] = issue.Labels;
                 }
 
                 var patch = new { fields };
@@ -281,7 +335,6 @@ namespace IssueManager.Services
                 // ---------- 2. Handle status update (via transition) ----------
                 if (!string.IsNullOrEmpty(issue.StatusCategory))
                 {
-                    // Get available transitions
                     var transitionsResp = await client.GetAsync($"/rest/api/3/issue/{issue.Key}/transitions");
                     if (!transitionsResp.IsSuccessStatusCode)
                         return false;
@@ -289,34 +342,132 @@ namespace IssueManager.Services
                     var transitionsJson = await transitionsResp.Content.ReadAsStringAsync();
                     string transitionId = null;
 
-                    using (var doc = JsonDocument.Parse(transitionsJson))
+                    // ✅ Define mapping between local status and Jira transition name
+                    var statusToTransitionName = new Dictionary<string, string>
+    {
+        { "Done", "Done" },
+        { "Ootel", "To Do" },
+        { "Tegemisel", "In Progress" }, // <-- update this based on your Jira setup
+    };
+
+                    if (statusToTransitionName.TryGetValue(issue.StatusCategory, out var targetTransitionName))
                     {
-                        foreach (var t in doc.RootElement.GetProperty("transitions").EnumerateArray())
+                        using (var doc = JsonDocument.Parse(transitionsJson))
                         {
-                            if (t.GetProperty("name").GetString() == issue.StatusCategory)
+                            foreach (var t in doc.RootElement.GetProperty("transitions").EnumerateArray())
                             {
-                                transitionId = t.GetProperty("id").GetString();
-                                break;
+                                if (t.GetProperty("name").GetString() == targetTransitionName)
+                                {
+                                    transitionId = t.GetProperty("id").GetString();
+                                    break;
+                                }
                             }
                         }
-                    }
 
-                    if (!string.IsNullOrEmpty(transitionId))
-                    {
-                        var transitionPayload = new
+                        if (!string.IsNullOrEmpty(transitionId))
                         {
-                            transition = new { id = transitionId }
-                        };
+                            var transitionPayload = new
+                            {
+                                transition = new { id = transitionId }
+                            };
 
-                        var transitionContent = new StringContent(SystemTextJson.JsonSerializer.Serialize(transitionPayload), Encoding.UTF8, "application/json");
-                        var transitionResp = await client.PostAsync($"/rest/api/3/issue/{issue.Key}/transitions", transitionContent);
+                            var transitionContent = new StringContent(SystemTextJson.JsonSerializer.Serialize(transitionPayload), Encoding.UTF8, "application/json");
+                            var transitionResp = await client.PostAsync($"/rest/api/3/issue/{issue.Key}/transitions", transitionContent);
 
-                        if (!transitionResp.IsSuccessStatusCode)
-                            return false;
+                            if (!transitionResp.IsSuccessStatusCode)
+                                return false;
+                        }
                     }
                 }
 
+
                 return true;
+            }
+        }
+        private object UpdateTextInADF(JsonElement originalADF, string newText)
+        {
+            var updatedContent = new List<object>();
+
+            foreach (var block in originalADF.GetProperty("content").EnumerateArray())
+            {
+                // If block is a paragraph and has text content, replace it
+                if (block.GetProperty("type").GetString() == "paragraph" &&
+                    block.TryGetProperty("content", out var paragraphContent) &&
+                    paragraphContent.ValueKind == JsonValueKind.Array)
+                {
+                    var replacedParagraph = new
+                    {
+                        type = "paragraph",
+                        content = new object[]
+                        {
+                    new { type = "text", text = newText }
+                        }
+                    };
+
+                    updatedContent.Add(replacedParagraph);
+                }
+                else
+                {
+                    // Preserve all other blocks as-is (e.g. images, panels, etc.)
+                    updatedContent.Add(SystemTextJson.JsonSerializer.Deserialize<object>(block.GetRawText()));
+                }
+            }
+
+            return new
+            {
+                type = "doc",
+                version = 1,
+                content = updatedContent
+            };
+        }
+        public async Task<bool> UploadAttachmentAsync(string issueKey, string filePath)
+        {
+            if (!File.Exists(filePath))
+                return false;
+
+            using (var client = new HttpClient())
+            {
+                var auth = Convert.ToBase64String(Encoding.ASCII.GetBytes($"{email}:{apiToken}"));
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", auth);
+                client.DefaultRequestHeaders.Add("X-Atlassian-Token", "no-check");
+
+                using (var form = new MultipartFormDataContent())
+                {
+                    var fileContent = new ByteArrayContent(File.ReadAllBytes(filePath));
+                    fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse("application/octet-stream");
+
+                    form.Add(fileContent, "file", Path.GetFileName(filePath));
+
+                    var response = await client.PostAsync($"{baseUrl}/rest/api/3/issue/{issueKey}/attachments", form);
+                    return response.IsSuccessStatusCode;
+                }
+            }
+        }
+        public async Task<bool> AttachFileToIssueAsync(string issueKey, string filePath)
+        {
+            try
+            {
+                if (!File.Exists(filePath))
+                    return false;
+
+                using (var content = new MultipartFormDataContent())
+                using (var fileStream = File.OpenRead(filePath))
+                {
+                    var fileContent = new StreamContent(fileStream);
+                    fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+                    content.Add(fileContent, "file", Path.GetFileName(filePath));
+
+                    _client.DefaultRequestHeaders.Remove("X-Atlassian-Token"); // Ensure no duplicate
+                    _client.DefaultRequestHeaders.Add("X-Atlassian-Token", "no-check");
+
+                    var response = await _client.PostAsync($"/rest/api/3/issue/{issueKey}/attachments", content);
+                    return response.IsSuccessStatusCode;
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to attach file to Jira issue: {ex.Message}");
+                return false;
             }
         }
 
@@ -328,6 +479,13 @@ namespace IssueManager.Services
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", auth);
                 client.BaseAddress = new Uri(baseUrl);
 
+                // Fetch current user info
+                var myselfResp = await client.GetAsync("/rest/api/3/myself");
+                myselfResp.EnsureSuccessStatusCode();
+                var myselfJson = await myselfResp.Content.ReadAsStringAsync();
+                var myId = JsonDocument.Parse(myselfJson).RootElement.GetProperty("accountId").GetString();
+
+                // Fetch assignable users
                 var response = await client.GetAsync($"/rest/api/3/user/assignable/search?project={projectKey}");
                 response.EnsureSuccessStatusCode();
 
@@ -344,7 +502,8 @@ namespace IssueManager.Services
                         users.Add(new JiraUser
                         {
                             DisplayName = displayName,
-                            AccountId = accountId
+                            AccountId = accountId,
+                            IsCurrentUser = (accountId == myId)
                         });
                     }
                 }
@@ -352,6 +511,7 @@ namespace IssueManager.Services
                 return users;
             }
         }
+
         public async Task<List<string>> GetIssueStatusesAsync(string issueKey)
         {
             using (var client = new HttpClient())
@@ -425,31 +585,155 @@ namespace IssueManager.Services
                 return false;
             }
         }
+        public async Task<string> CreateIssueAsync(
+            string projectKey,
+            string summary,
+            string description,
+            string assignee,
+            string priority,
+            List<string> labels = null,
+            string sectionBoxMetadata = null,
+            string imagePath = null)
 
-
-        public async Task<bool> CreateIssueAsync(string projectKey, string summary, string description, string assignee)
         {
-            var payload = new
+            var fields = new Dictionary<string, object>
+    {
+        { "project", new { key = projectKey } },
+        { "summary", summary },
+        { "description", description },
+        { "issuetype", new { name = "Task" } }
+    };
+
+            if (!string.IsNullOrEmpty(assignee))
+                fields["assignee"] = new { name = assignee };
+
+            if (!string.IsNullOrEmpty(priority))
+                fields["priority"] = new { name = priority };
+
+            if (labels != null && labels.Any())
             {
-                fields = new
-                {
-                    project = new { key = projectKey },
-                    summary = summary,
-                    description = description,
-                    issuetype = new { name = "Task" },
-                    assignee = assignee == null ? null : new { name = assignee }
-                }
-            };
+                fields["labels"] = labels.Distinct().ToList();
+            }
 
-            string json = NewtonsoftJson.JsonConvert.SerializeObject(payload, NewtonsoftJson.Formatting.None,
+
+            var payload = new { fields };
+
+            string json = NewtonsoftJson.JsonConvert.SerializeObject(
+                payload,
+                NewtonsoftJson.Formatting.None,
                 new NewtonsoftJson.JsonSerializerSettings { NullValueHandling = NewtonsoftJson.NullValueHandling.Ignore });
-
 
             var content = new StringContent(json, Encoding.UTF8, "application/json");
             var response = await _client.PostAsync($"{_baseUrl}/rest/api/2/issue", content);
 
-            return response.IsSuccessStatusCode;
+            if (!response.IsSuccessStatusCode)
+                return null;
+
+            var responseBody = await response.Content.ReadAsStringAsync();
+            using (var doc = JsonDocument.Parse(responseBody))
+            {
+                if (doc.RootElement.TryGetProperty("key", out var keyElem))
+                    return keyElem.GetString();
+            }
+
+            return null;
         }
+
+        public async Task<JiraIssue> GetIssueByKeyAsync(string issueKey)
+        {
+            var response = await _client.GetAsync($"/rest/api/3/issue/{issueKey}?fields=summary,description,assignee,reporter,status,attachment,labels,priority");
+            if (!response.IsSuccessStatusCode)
+                return null;
+
+            var json = await response.Content.ReadAsStringAsync();
+            var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            var fields = root.GetProperty("fields");
+
+            string summary = fields.GetProperty("summary").GetString();
+            string description = "";
+            if (fields.TryGetProperty("description", out var descElem) && descElem.ValueKind == JsonValueKind.Object)
+            {
+                if (descElem.TryGetProperty("content", out var blocks) && blocks.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var block in blocks.EnumerateArray())
+                    {
+                        if (block.TryGetProperty("content", out var inner) && inner.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var node in inner.EnumerateArray())
+                            {
+                                if (node.TryGetProperty("text", out var textVal))
+                                    description += textVal.GetString() + "\n";
+                            }
+                        }
+                    }
+                }
+            }
+
+            string statusCategory = fields.TryGetProperty("status", out var statusElem) &&
+                                    statusElem.TryGetProperty("statusCategory", out var categoryElem) &&
+                                    categoryElem.TryGetProperty("name", out var nameElem)
+                ? nameElem.GetString()
+                : null;
+
+            string priority = fields.TryGetProperty("priority", out var priorityElem) &&
+                             priorityElem.TryGetProperty("name", out var prioName)
+                             ? prioName.GetString()
+                             : null;
+
+            string assigneeName = null;
+            string assigneeAccountId = null;
+            if (fields.TryGetProperty("assignee", out var assigneeElem) && assigneeElem.ValueKind == JsonValueKind.Object)
+            {
+                if (assigneeElem.TryGetProperty("displayName", out var nameProp))
+                    assigneeName = nameProp.GetString();
+                if (assigneeElem.TryGetProperty("accountId", out var idProp))
+                    assigneeAccountId = idProp.GetString();
+            }
+
+            // ✅ Load image attachments (same logic as GetProjectIssuesAsync)
+            List<string> imageUrls = new List<string>();
+            List<BitmapImage> imageBitmaps = new List<BitmapImage>();
+
+            if (fields.TryGetProperty("attachment", out var attachments) && attachments.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var att in attachments.EnumerateArray())
+                {
+                    if (att.TryGetProperty("mimeType", out var mimeTypeElem) &&
+                        mimeTypeElem.GetString().StartsWith("image/") &&
+                        att.TryGetProperty("content", out var contentElem))
+                    {
+                        imageUrls.Add(contentElem.GetString());
+                    }
+                }
+            }
+
+            foreach (var url in imageUrls)
+            {
+                try
+                {
+                    var bitmap = await DownloadImageAsync(url);
+                    imageBitmaps.Add(bitmap);
+                }
+                catch { }
+            }
+
+            return new JiraIssue
+            {
+                Key = issueKey,
+                Summary = summary,
+                Description = description.Trim(),
+                Assignee = assigneeName,
+                AssigneeAccountId = assigneeAccountId,
+                StatusCategory = statusCategory,
+                Priority = priority,
+                ImageUrls = imageUrls,
+                ImageBitmaps = imageBitmaps
+            };
+        }
+
+
 
         public class JiraConfig
         {

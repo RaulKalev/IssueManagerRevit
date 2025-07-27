@@ -1,6 +1,7 @@
 ﻿using IssueManager.Models;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows;
 
@@ -14,12 +15,23 @@ namespace IssueManager.Views
         private string currentStatusFilter = "All";
         public List<string> SelectedLabels { get; private set; } = new List<string>();
         public List<string> AllLabels { get; set; } = new List<string>();
-
-
+        private const string WindowKey = "FilterSettingsWindow";
         public FilterSettingsWindow(List<JiraIssue> allIssues, string currentAssignee, string currentStatus, List<string> selectedLabels)
         {
             InitializeComponent();
             ApplyTheme();
+            // ✅ Restore position
+            var pos = WindowPositionManager.Load(WindowKey);
+            if (pos.Left != 0 || pos.Top != 0)
+            {
+                this.Left = pos.Left;
+                this.Top = pos.Top;
+            }
+            else
+            {
+                this.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            }
+
             this.DataContext = this;
 
             // Build item sources with "All" always first
@@ -38,7 +50,7 @@ namespace IssueManager.Views
                 .ToList();
 
             AllLabels = allIssues
-                .SelectMany(i => i.Labels ?? new List<string>())
+                .SelectMany(i => (IEnumerable<string>)(i.Labels ?? new ObservableCollection<string>()))
                 .Where(l => !string.IsNullOrWhiteSpace(l))
                 .Distinct()
                 .OrderBy(x => x)
@@ -59,11 +71,12 @@ namespace IssueManager.Views
             var statusList = new List<string> { "All" };
             statusList.AddRange(allStatuses);
             AllLabels = allIssues
-            .SelectMany(i => i.Labels ?? new List<string>())
-            .Where(l => !string.IsNullOrWhiteSpace(l))
-            .Distinct()
-            .OrderBy(x => x)
-            .ToList();
+                .SelectMany(i => (IEnumerable<string>)(i.Labels ?? new ObservableCollection<string>()))
+                .Where(l => !string.IsNullOrWhiteSpace(l))
+                .Distinct()
+                .OrderBy(x => x)
+                .ToList();
+
 
             // Bind lists
             AssigneeFilterComboBox.ItemsSource = assigneeList;
@@ -72,6 +85,11 @@ namespace IssueManager.Views
             // Select previously selected filter or default to "All"
             AssigneeFilterComboBox.SelectedItem = string.IsNullOrEmpty(currentAssignee) ? "All" : currentAssignee;
             StatusFilterComboBox.SelectedItem = string.IsNullOrEmpty(currentStatus) ? "All" : currentStatus;
+            // ✅ Save position on close
+            this.Closing += (s, e) =>
+            {
+                WindowPositionManager.Save(WindowKey, this.Left, this.Top);
+            };
         }
 
         private void ApplyTheme()

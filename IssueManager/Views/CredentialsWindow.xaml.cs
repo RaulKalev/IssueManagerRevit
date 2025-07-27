@@ -1,7 +1,8 @@
 ﻿using IssueManager.Services;
+using Newtonsoft.Json;
+using System;
 using System.Diagnostics;
 using System.IO;
-using Newtonsoft.Json;
 using System.Windows;
 
 namespace IssueManager.Views
@@ -16,6 +17,7 @@ namespace IssueManager.Views
         public CredentialsWindow(string configPath)
         {
             InitializeComponent();
+            ApplyTheme();
             this.configPath = configPath;
         }
 
@@ -47,6 +49,27 @@ namespace IssueManager.Views
         {
             DialogResult = false;
             Close();
+        }
+        private void ApplyTheme()
+        {
+            string themeUri = ThemeManager.IsDarkMode
+                ? "pack://application:,,,/IssueManager;component/Views/Themes/DarkTheme.xaml"
+                : "pack://application:,,,/IssueManager;component/Views/Themes/LightTheme.xaml";
+
+            try
+            {
+                var dict = new ResourceDictionary
+                {
+                    Source = new Uri(themeUri, UriKind.Absolute)
+                };
+
+                Resources.MergedDictionaries.Clear();
+                Resources.MergedDictionaries.Add(dict);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to load theme in CreateTaskWindow: {ex.Message}");
+            }
         }
     }
 }

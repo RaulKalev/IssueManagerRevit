@@ -9,5 +9,7 @@
         {
             return DisplayName;
         }
+        public bool IsCurrentUser { get; set; }
+
     }
 }
