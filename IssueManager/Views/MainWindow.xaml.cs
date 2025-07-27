@@ -33,6 +33,7 @@ namespace IssueManager.Views
         private List<string> currentLabelFilters = new List<string>();
         public JiraIssue CreatedIssue { get; private set; }
         public ICommand ImageClickCommand { get; }
+        private System.Windows.Threading.DispatcherTimer autoRefreshTimer;
 
         public DockablePage2()
         {
@@ -42,9 +43,24 @@ namespace IssueManager.Views
             ThemeManager.IsDarkMode = _isDarkMode;
             ImageClickCommand = new RelayCommand<object>(OnImageClicked);
             DataContext = this;
+            InitializeAutoRefreshTimer();
 
             LoadTheme();
         }
+        private void InitializeAutoRefreshTimer()
+        {
+            autoRefreshTimer = new System.Windows.Threading.DispatcherTimer();
+            autoRefreshTimer.Interval = TimeSpan.FromMinutes(10);
+            autoRefreshTimer.Tick += (s, e) =>
+            {
+                if (this.IsVisible && ProjectComboBox.SelectedItem is JiraProject)
+                {
+                    RefreshButton_Click(null, null);
+                }
+            };
+            autoRefreshTimer.Start();
+        }
+
         private void LoadConfig()
         {
             try
@@ -326,12 +342,15 @@ namespace IssueManager.Views
             this.IsVisibleChanged -= DockablePage2_IsVisibleChanged;
             jiraService = null;
 
+            autoRefreshTimer?.Stop();
+
             TaskDialog td = new TaskDialog("Plugin Cleanup");
             td.MainInstruction = "Plugin resources cleaned up.";
             td.MainContent = "All resources have been released and background tasks cancelled.";
             td.CommonButtons = TaskDialogCommonButtons.Close;
             td.Show();
         }
+
 
         private void LoadTheme()
         {

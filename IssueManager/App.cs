@@ -34,8 +34,8 @@ namespace IssueManager
 
             ribbonPanel.CreatePushButton<CommandShow>()
                 .SetLargeImage("Assets/Issues.tiff")
-                .SetText("Issues")
-                .SetToolTip("Create and resolve issues.")
+                .SetText("Ülesanded")
+                .SetToolTip("Jira ülesanded Revitis.")
                 .SetContextualHelp("https://raulkalev.github.io/rktools/");
 
             return Result.Succeeded;
