@@ -16,7 +16,7 @@ namespace IssueManager.Views
         public List<string> SelectedLabels { get; private set; } = new List<string>();
         public List<string> AllLabels { get; set; } = new List<string>();
         private const string WindowKey = "FilterSettingsWindow";
-        public FilterSettingsWindow(List<JiraIssue> allIssues, string currentAssignee, string currentStatus, List<string> selectedLabels)
+        public FilterSettingsWindow(List<JiraIssue> allIssues, string currentAssignee, string currentStatus, List<string> selectedLabels, List<string> predefinedLabels = null)
         {
             InitializeComponent();
             ApplyTheme();
@@ -49,12 +49,17 @@ namespace IssueManager.Views
                 .OrderBy(x => x)
                 .ToList();
 
-            AllLabels = allIssues
+            var issueLabels = allIssues
                 .SelectMany(i => (IEnumerable<string>)(i.Labels ?? new ObservableCollection<string>()))
                 .Where(l => !string.IsNullOrWhiteSpace(l))
+                .Distinct();
+
+            AllLabels = (predefinedLabels ?? new List<string>())
+                .Concat(issueLabels)
                 .Distinct()
                 .OrderBy(x => x)
                 .ToList();
+
 
             LabelCheckComboBox.ItemsSource = AllLabels;
 
@@ -70,13 +75,6 @@ namespace IssueManager.Views
 
             var statusList = new List<string> { "All" };
             statusList.AddRange(allStatuses);
-            AllLabels = allIssues
-                .SelectMany(i => (IEnumerable<string>)(i.Labels ?? new ObservableCollection<string>()))
-                .Where(l => !string.IsNullOrWhiteSpace(l))
-                .Distinct()
-                .OrderBy(x => x)
-                .ToList();
-
 
             // Bind lists
             AssigneeFilterComboBox.ItemsSource = assigneeList;

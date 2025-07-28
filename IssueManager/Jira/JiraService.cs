@@ -26,6 +26,7 @@ namespace IssueManager.Services
         private readonly string apiToken;
         private readonly string _baseUrl;
         private readonly HttpClient _client;
+        public string BaseUrl => baseUrl;
 
         public JiraService(string baseUrl, string email, string apiToken)
         {
@@ -228,11 +229,18 @@ namespace IssueManager.Services
                         string originalDescriptionADF = null;
                         JsonElement? originalADFJson = null;
 
-                        if (fields.TryGetProperty("description", out descRaw))
+                        if (fields.TryGetProperty("description", out descRaw) && descRaw.ValueKind == JsonValueKind.Object)
                         {
                             originalDescriptionADF = descRaw.ToString();
                             originalADFJson = JsonDocument.Parse(descRaw.GetRawText()).RootElement.Clone();
                         }
+                        else
+                        {
+                            // Use a basic empty paragraph ADF fallback
+                            originalDescriptionADF = "{\"type\":\"doc\",\"version\":1,\"content\":[{\"type\":\"paragraph\"}]}";
+                            originalADFJson = JsonDocument.Parse(originalDescriptionADF).RootElement.Clone();
+                        }
+
 
                         var jiraIssue = new JiraIssue
                         {
@@ -301,13 +309,17 @@ namespace IssueManager.Services
                     fields["summary"] = issue.Summary;
                 }
 
-                // Update description only if it changed and OriginalADFJson is available
-                if (!string.IsNullOrWhiteSpace(issue.Description) && issue.OriginalADFJson.HasValue)
+                // Update description safely even if ADF is missing
+                if (!string.IsNullOrWhiteSpace(issue.Description))
                 {
-                    var updatedADF = UpdateTextInADF(issue.OriginalADFJson.Value, issue.Description);
+                    var fallbackADF = JsonDocument.Parse(
+                        "{\"type\":\"doc\",\"version\":1,\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"\"}]}]}"
+                    ).RootElement;
+
+                    var adf = issue.OriginalADFJson ?? fallbackADF;
+                    var updatedADF = UpdateTextInADF(adf, issue.Description);
                     fields["description"] = updatedADF;
                 }
-
 
                 if (!string.IsNullOrEmpty(issue.AssigneeAccountId))
                 {
@@ -387,10 +399,10 @@ namespace IssueManager.Services
         private object UpdateTextInADF(JsonElement originalADF, string newText)
         {
             var updatedContent = new List<object>();
+            bool contentReplaced = false;
 
             foreach (var block in originalADF.GetProperty("content").EnumerateArray())
             {
-                // If block is a paragraph and has text content, replace it
                 if (block.GetProperty("type").GetString() == "paragraph" &&
                     block.TryGetProperty("content", out var paragraphContent) &&
                     paragraphContent.ValueKind == JsonValueKind.Array)
@@ -403,14 +415,26 @@ namespace IssueManager.Services
                     new { type = "text", text = newText }
                         }
                     };
-
                     updatedContent.Add(replacedParagraph);
+                    contentReplaced = true;
                 }
                 else
                 {
-                    // Preserve all other blocks as-is (e.g. images, panels, etc.)
                     updatedContent.Add(SystemTextJson.JsonSerializer.Deserialize<object>(block.GetRawText()));
                 }
+            }
+
+            // If original ADF had no usable content (e.g., was just an empty paragraph), create it manually
+            if (!contentReplaced)
+            {
+                updatedContent.Add(new
+                {
+                    type = "paragraph",
+                    content = new object[]
+                    {
+                new { type = "text", text = newText }
+                    }
+                });
             }
 
             return new
@@ -420,6 +444,7 @@ namespace IssueManager.Services
                 content = updatedContent
             };
         }
+
         public async Task<bool> UploadAttachmentAsync(string issueKey, string filePath)
         {
             if (!File.Exists(filePath))
@@ -638,6 +663,58 @@ namespace IssueManager.Services
 
             return null;
         }
+        public class JiraComment
+        {
+            public Body body { get; set; }
+        }
+
+        public class Body
+        {
+            public List<Content> content { get; set; }
+        }
+
+        public class Content
+        {
+            public List<ContentText> content { get; set; }
+        }
+
+        public class ContentText
+        {
+            public string text { get; set; }
+        }
+
+        public class JiraCommentResponse
+        {
+            public List<JiraComment> comments { get; set; }
+        }
+
+        public async Task<List<string>> GetIssueCommentsAsync(string issueKey)
+        {
+            var url = $"{_baseUrl}/rest/api/3/issue/{issueKey}/comment";
+            var response = await _client.GetAsync(url);
+            response.EnsureSuccessStatusCode();
+
+            var content = await response.Content.ReadAsStringAsync();
+            var json = NewtonsoftJson.JsonConvert.DeserializeObject<JiraCommentResponse>(content);
+
+            var comments = new List<string>();
+
+            foreach (var comment in json.comments)
+            {
+                try
+                {
+                    var text = comment.body?.content?[0]?.content?[0]?.text;
+                    comments.Add(string.IsNullOrWhiteSpace(text) ? "(Empty comment)" : text);
+                }
+                catch
+                {
+                    comments.Add("(Unsupported comment format)");
+                }
+            }
+
+            return comments;
+        }
+
 
         public async Task<JiraIssue> GetIssueByKeyAsync(string issueKey)
         {

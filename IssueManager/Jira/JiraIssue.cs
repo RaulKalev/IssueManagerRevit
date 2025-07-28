@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -30,6 +31,11 @@ namespace IssueManager.Models
         public string OriginalDescriptionADF { get; set; }
         public JsonElement? OriginalADFJson { get; set; }
         public ObservableCollection<ImageWithIssue> ImageWithIssues { get; set; } = new ObservableCollection<ImageWithIssue>();
+        public ObservableCollection<string> Comments { get; set; } = new ObservableCollection<string>();
+        public string CommentsText => Comments != null && Comments.Count > 0
+            ? string.Join("\n• ", Comments.Prepend("•"))
+            : "—";
+
 
         public string Key { get; set; }
         public string Reporter { get; set; }
@@ -273,8 +279,12 @@ namespace IssueManager.Models
             AllStatuses = new List<string>();
             Labels = new ObservableCollection<string>();
             Labels.CollectionChanged += (s, e) => OnPropertyChanged(nameof(LabelsText));
+
+            Comments.CollectionChanged += (s, e) => OnPropertyChanged(nameof(CommentsText)); // ✅ Add this
+
             ToggleEditCommand = new RelayCommand(ToggleEdit);
         }
+
         public static Func<JiraIssue, Task<bool>> UpdateCallback;
 
         private async void ToggleEdit()

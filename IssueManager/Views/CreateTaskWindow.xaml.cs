@@ -101,9 +101,20 @@ namespace IssueManager.Views
 
             }
             // Load all labels from existing issues
+            // Load all labels from existing issues
             var uniqueLabels = allIssues.SelectMany(i => i.Labels).Distinct().OrderBy(x => x).ToList();
 
-            foreach (var label in uniqueLabels)
+            // Add predefined labels
+            var predefinedLabels = new List<string> { "Ristumine", "EL", "EN", "EA/EAT" };
+
+            // Merge predefined with existing, keeping only unique and sorted
+            var combinedLabels = predefinedLabels
+                .Concat(uniqueLabels)
+                .Distinct()
+                .OrderBy(x => x)
+                .ToList();
+
+            foreach (var label in combinedLabels)
                 AvailableLabels.Add(label);
 
             // Set DataContext for binding
@@ -155,7 +166,7 @@ namespace IssueManager.Views
                 return;
             }
 
-            var labels = SelectedLabels.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().ToList();
+            var labels = SelectedLabels?.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().ToList() ?? new List<string>();
 
             // Add "Ristumine" if section box & image are provided
             if (!string.IsNullOrWhiteSpace(_sectionBoxMetadata) && File.Exists(captureViewImageHandler?.ResultImagePath))
@@ -195,6 +206,24 @@ namespace IssueManager.Views
                 }
 
                 CreatedIssue = await _jiraService.GetIssueByKeyAsync(issueKey);
+                if (CreatedIssue != null)
+                {
+                    CreatedIssue.ImageWithIssues = new ObservableCollection<ImageWithIssue>();
+
+                    if (CreatedIssue.ImageBitmaps != null)
+                    {
+                        foreach (var img in CreatedIssue.ImageBitmaps)
+                        {
+                            CreatedIssue.ImageWithIssues.Add(new ImageWithIssue
+                            {
+                                Image = img,
+                                Issue = CreatedIssue
+                            });
+                        }
+                    }
+                }
+
+
                 TaskCreated?.Invoke(CreatedIssue);
                 Close();
             }

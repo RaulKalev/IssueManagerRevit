@@ -4,6 +4,7 @@ using IssueManager.Services;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -34,6 +35,7 @@ namespace IssueManager.Views
         public JiraIssue CreatedIssue { get; private set; }
         public ICommand ImageClickCommand { get; }
         private System.Windows.Threading.DispatcherTimer autoRefreshTimer;
+        private readonly List<string> predefinedLabels = new List<string> { "Ristumine", "EL", "EN", "EA/EAT" };
 
         public DockablePage2()
         {
@@ -243,7 +245,24 @@ namespace IssueManager.Views
                     {
                         issue.AllAssignees = cachedUsers;
                         issue.AllStatuses = await jiraService.GetIssueStatusesAsync(issue.Key);
+
+                        var dynamicLabels = issue.Labels != null
+                            ? issue.Labels.ToList()
+                            : new List<string>();
+
+                        issue.AllLabels = new ObservableCollection<string>(
+                            predefinedLabels
+                                .Concat(dynamicLabels)
+                                .Distinct()
+                                .OrderBy(x => x)
+                        );
+
+                        // ✅ Load comments
+                        var commentList = await jiraService.GetIssueCommentsAsync(issue.Key);
+                        issue.Comments = new ObservableCollection<string>(commentList);
                     }
+
+
 
                     allLoadedIssues = issues;
                     ApplyCurrentFilters();
@@ -302,7 +321,21 @@ namespace IssueManager.Views
                     {
                         issue.AllAssignees = cachedUsers ?? new List<JiraUser>();
                         issue.AllStatuses = await jiraService.GetIssueStatusesAsync(issue.Key);
+
+                        var dynamicLabels = issue.Labels != null
+                            ? issue.Labels.ToList()
+                            : new List<string>();
+
+                        issue.AllLabels = new ObservableCollection<string>(
+                            predefinedLabels
+                                .Concat(dynamicLabels)
+                                .Distinct()
+                                .OrderBy(x => x)
+                        );
+
+
                     }
+
 
                     ApplyCurrentFilters();
 
@@ -397,7 +430,13 @@ namespace IssueManager.Views
             if (allLoadedIssues == null || allLoadedIssues.Count == 0)
                 return;
 
-            var window = new FilterSettingsWindow(allLoadedIssues, currentAssigneeFilter, currentStatusFilter, currentLabelFilters);
+            var window = new FilterSettingsWindow(
+                allLoadedIssues,
+                currentAssigneeFilter,
+                currentStatusFilter,
+                currentLabelFilters,
+                predefinedLabels);
+
             window.Owner = Window.GetWindow(this);
 
             if (window.ShowDialog() == true)
@@ -516,6 +555,33 @@ namespace IssueManager.Views
             else
             {
                 TaskDialog.Show("Error", "Invalid issue parameter in OnImageClicked.");
+            }
+        }
+        private void OpenProject_InBrowser(object sender, RoutedEventArgs e)
+        {
+            if (ProjectComboBox.SelectedItem is JiraProject selectedProject)
+            {
+                string baseUrl = jiraService?.BaseUrl?.TrimEnd('/');
+                if (!string.IsNullOrWhiteSpace(baseUrl) && !string.IsNullOrWhiteSpace(selectedProject.key))
+                {
+                    string url = $"{baseUrl}/browse/{selectedProject.key}";
+                    try
+                    {
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = url,
+                            UseShellExecute = true
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"Failed to open browser: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    }
+                }
+            }
+            else
+            {
+                MessageBox.Show("Please select a Jira project first.", "No Project Selected", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
 

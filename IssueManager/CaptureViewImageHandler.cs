@@ -17,9 +17,10 @@ namespace IssueManager.ExternalEvents
         {
             try
             {
-                var doc = UiDoc.Document;
+                var uidoc = app.ActiveUIDocument;
+                var doc = uidoc.Document;
                 var view = doc.ActiveView;
-                var uidoc = ServiceRegistry.Uidoc;
+
 
                 string tempImagePath = Path.Combine(Path.GetTempPath(), $"RevitView_{Guid.NewGuid()}.png");
 
@@ -72,7 +73,9 @@ namespace IssueManager.ExternalEvents
                     SectionBoxMetadata = null;
                 }
 
+                UiDoc = uidoc; // ✅ Update reference to the actual active UIDocument
                 OnImageCaptured?.Invoke(ResultImagePath);
+
             }
             catch (Exception ex)
             {
