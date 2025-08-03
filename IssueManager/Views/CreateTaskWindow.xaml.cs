@@ -7,8 +7,10 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media.Imaging;
 
 namespace IssueManager.Views
@@ -27,6 +29,8 @@ namespace IssueManager.Views
         public ObservableCollection<string> AvailableLabels { get; } = new ObservableCollection<string>();
         public ObservableCollection<string> SelectedLabels { get; } = new ObservableCollection<string>();
 
+        private ObservableCollection<string> _imagePaths = new ObservableCollection<string>();
+        public ObservableCollection<string> AdditionalImages => _imagePaths;
 
         public static void ShowOrActivate(
             JiraService jiraService,
@@ -59,6 +63,9 @@ namespace IssueManager.Views
             _openInstance = this;
             InitializeComponent();
             ApplyTheme();
+            this.Loaded += async (s, e) => await LoadAssignableUsersAsync(selectedProject);
+            this.AllowDrop = true;
+            this.Drop += CreateTaskWindow_Drop;
 
             var pos = WindowPositionManager.Load(WindowKey);
             if (pos.Left != 0 || pos.Top != 0)
@@ -86,11 +93,10 @@ namespace IssueManager.Views
                             bitmap.CacheOption = BitmapCacheOption.OnLoad;
                             bitmap.EndInit();
 
-                            CapturedImagePreview.Source = bitmap;
-                            CapturedImagePreview.Visibility = Visibility.Visible;
-
-                            // ✅ ADD THIS LINE:
                             _sectionBoxMetadata = captureViewImageHandler.SectionBoxMetadata;
+
+                            if (!_imagePaths.Contains(imagePath))
+                                _imagePaths.Insert(0, imagePath);
                         }
                         catch (Exception ex)
                         {
@@ -129,8 +135,6 @@ namespace IssueManager.Views
             ProjectComboBox.ItemsSource = _projects;
             ProjectComboBox.SelectedItem = selectedProject;
 
-            AssigneeComboBox.ItemsSource = new[] { "Unassigned" }.Concat(_assignees);
-            AssigneeComboBox.SelectedIndex = 0;
 
             PriorityComboBox.ItemsSource = _priorities;
             PriorityComboBox.SelectedItem = "Medium";
@@ -156,8 +160,10 @@ namespace IssueManager.Views
             {
                 taskDescription += $"\n\n<!-- {_sectionBoxMetadata} -->";
             }
-            string assignee = AssigneeComboBox.SelectedItem?.ToString();
-            assignee = (assignee == "Unassigned") ? null : assignee;
+            string assignee = null;
+            if (AssigneeComboBox.SelectedItem is JiraUser user)
+                assignee = user.AccountId;
+
             string priority = SelectedPriority;
 
             if (string.IsNullOrWhiteSpace(taskName))
@@ -187,16 +193,22 @@ namespace IssueManager.Views
 
             if (!string.IsNullOrEmpty(issueKey))
             {
-                // ✅ Upload and clean up image
-                if (File.Exists(captureViewImageHandler?.ResultImagePath))
+                // ✅ Upload all images in _imagePaths (including the Revit one if present)
+                foreach (var imagePath in _imagePaths)
                 {
-                    var uploaded = await _jiraService.AttachFileToIssueAsync(issueKey, captureViewImageHandler.ResultImagePath);
-
-                    if (uploaded)
+                    if (File.Exists(imagePath))
                     {
+                        var uploaded = await _jiraService.AttachFileToIssueAsync(issueKey, imagePath);
+
+                        // Optionally clean up temp files (pasted/auto-generated), but not user files!
                         try
                         {
-                            File.Delete(captureViewImageHandler.ResultImagePath);
+                            // Only delete if file is in temp folder (be careful with user-added files)
+                            if (imagePath.StartsWith(Path.GetTempPath(), StringComparison.InvariantCultureIgnoreCase) && File.Exists(imagePath))
+                            {
+                                try { File.Delete(imagePath); } catch { }
+                            }
+
                         }
                         catch (Exception ex)
                         {
@@ -204,6 +216,7 @@ namespace IssueManager.Views
                         }
                     }
                 }
+
 
                 CreatedIssue = await _jiraService.GetIssueByKeyAsync(issueKey);
                 if (CreatedIssue != null)
@@ -233,6 +246,15 @@ namespace IssueManager.Views
             }
         }
 
+        private async Task LoadAssignableUsersAsync(string selectedProject)
+        {
+            var assignableUsers = await _jiraService.GetProjectUsersAsync(selectedProject);
+            assignableUsers.Insert(0, new JiraUser { DisplayName = "Unassigned", AccountId = null });
+            AssigneeComboBox.ItemsSource = assignableUsers;
+            AssigneeComboBox.DisplayMemberPath = "DisplayName";
+            AssigneeComboBox.SelectedValuePath = "AccountId";
+            AssigneeComboBox.SelectedIndex = 0;
+        }
 
 
         public string SelectedPriority => PriorityComboBox.SelectedItem as string ?? "Medium";
@@ -266,6 +288,70 @@ namespace IssueManager.Views
         private void Ristumine_Click(object sender, RoutedEventArgs e)
         {
             ServiceRegistry.CaptureImageEvent?.Raise();
+        }
+        protected override void OnPreviewKeyDown(KeyEventArgs e)
+        {
+            if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control && e.Key == Key.V)
+            {
+                if (Clipboard.ContainsImage())
+                {
+                    var img = Clipboard.GetImage();
+                    var encoder = new PngBitmapEncoder();
+                    var tempFile = Path.Combine(Path.GetTempPath(), $"Ristumine_{Guid.NewGuid()}.png");
+                    using (var stream = new FileStream(tempFile, FileMode.Create))
+                    {
+                        encoder.Frames.Add(BitmapFrame.Create(img));
+                        encoder.Save(stream);
+                    }
+                    _imagePaths.Add(tempFile);
+                    // Optionally: Update UI binding for AdditionalImages
+                }
+            }
+            base.OnPreviewKeyDown(e);
+        }
+        private void CreateTaskWindow_Drop(object sender, DragEventArgs e)
+        {
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
+                var files = (string[])e.Data.GetData(DataFormats.FileDrop);
+                foreach (var file in files)
+                {
+                    var ext = Path.GetExtension(file).ToLower();
+                    if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp")
+                    {
+                        if (!_imagePaths.Contains(file))
+                            _imagePaths.Add(file);
+                    }
+                }
+            }
+        }
+        private void PasteImageButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (Clipboard.ContainsImage())
+            {
+                var img = Clipboard.GetImage();
+                var encoder = new PngBitmapEncoder();
+                var tempFile = Path.Combine(Path.GetTempPath(), $"Ristumine_{Guid.NewGuid()}.png");
+                using (var stream = new FileStream(tempFile, FileMode.Create))
+                {
+                    encoder.Frames.Add(BitmapFrame.Create(img));
+                    encoder.Save(stream);
+                }
+                _imagePaths.Add(tempFile);
+            }
+            else
+            {
+                MessageBox.Show("No image found in clipboard.", "Paste Error");
+            }
+        }
+        private void RemoveImageButton_Click(object sender, RoutedEventArgs e)
+        {
+            var button = sender as Button;
+            var imagePath = button?.Tag as string;
+            if (!string.IsNullOrEmpty(imagePath) && AdditionalImages.Contains(imagePath))
+            {
+                AdditionalImages.Remove(imagePath);
+            }
         }
 
 

@@ -14,6 +14,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
 
 namespace IssueManager.Views
 {
@@ -36,6 +37,25 @@ namespace IssueManager.Views
         public ICommand ImageClickCommand { get; }
         private System.Windows.Threading.DispatcherTimer autoRefreshTimer;
         private readonly List<string> predefinedLabels = new List<string> { "Ristumine", "EL", "EN", "EA/EAT" };
+        private DateTime _lastClickTime = DateTime.MinValue;
+        private const int DoubleClickThreshold = 300; // ms
+        public static async Task ForEachAsync<T>(IEnumerable<T> source, int degreeOfParallelism, Func<T, Task> body)
+        {
+            var tasks = new List<Task>();
+            using (var semaphore = new System.Threading.SemaphoreSlim(degreeOfParallelism))
+            {
+                foreach (var item in source)
+                {
+                    await semaphore.WaitAsync();
+                    tasks.Add(Task.Run(async () =>
+                    {
+                        try { await body(item); }
+                        finally { semaphore.Release(); }
+                    }));
+                }
+                await Task.WhenAll(tasks);
+            }
+        }
 
         public DockablePage2()
         {
@@ -217,8 +237,6 @@ namespace IssueManager.Views
                 ConnectToJira_Click(null, null);
             }
         }
-
-
         private async void ProjectComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             Storyboard storyboard = (Storyboard)FindResource("RotateIconStoryboard");
@@ -240,29 +258,24 @@ namespace IssueManager.Views
                     // Get issues
                     var issues = await jiraService.GetProjectIssuesAsync(selectedProject.key);
 
-                    // Assign users and statuses
+                    // Assign users up front (fast, no need for parallel)
                     foreach (var issue in issues)
-                    {
                         issue.AllAssignees = cachedUsers;
+
+                    // Fetch statuses, labels, and comments in parallel (limit to 8 threads)
+                    await ForEachAsync(issues, 8, async issue =>
+                    {
                         issue.AllStatuses = await jiraService.GetIssueStatusesAsync(issue.Key);
 
-                        var dynamicLabels = issue.Labels != null
-                            ? issue.Labels.ToList()
-                            : new List<string>();
-
+                        var dynamicLabels = issue.Labels != null ? issue.Labels.ToList() : new List<string>();
                         issue.AllLabels = new ObservableCollection<string>(
-                            predefinedLabels
-                                .Concat(dynamicLabels)
-                                .Distinct()
-                                .OrderBy(x => x)
+                            predefinedLabels.Concat(dynamicLabels).Distinct().OrderBy(x => x)
                         );
 
-                        // ✅ Load comments
+                        // Fetch comments in parallel too
                         var commentList = await jiraService.GetIssueCommentsAsync(issue.Key);
                         issue.Comments = new ObservableCollection<string>(commentList);
-                    }
-
-
+                    });
 
                     allLoadedIssues = issues;
                     ApplyCurrentFilters();
@@ -293,6 +306,7 @@ namespace IssueManager.Views
 
             SaveConfig();
         }
+
         private async void RefreshButton_Click(object sender, RoutedEventArgs e)
         {
             if (ProjectComboBox.SelectedItem is JiraProject selectedProject)
@@ -309,33 +323,26 @@ namespace IssueManager.Views
 
                     var issues = await jiraService.GetProjectIssuesAsync(selectedProject.key);
 
-                    // Reuse cached users
+                    // Set cached users
                     foreach (var issue in issues)
-                    {
                         issue.AllAssignees = cachedUsers ?? new List<JiraUser>();
-                    }
 
                     allLoadedIssues = issues;
 
-                    foreach (var issue in allLoadedIssues)
+                    // Fetch statuses and labels/comments in parallel (throttle to 8 threads)
+                    await ForEachAsync(allLoadedIssues, 8, async issue =>
                     {
-                        issue.AllAssignees = cachedUsers ?? new List<JiraUser>();
                         issue.AllStatuses = await jiraService.GetIssueStatusesAsync(issue.Key);
 
-                        var dynamicLabels = issue.Labels != null
-                            ? issue.Labels.ToList()
-                            : new List<string>();
-
+                        var dynamicLabels = issue.Labels != null ? issue.Labels.ToList() : new List<string>();
                         issue.AllLabels = new ObservableCollection<string>(
-                            predefinedLabels
-                                .Concat(dynamicLabels)
-                                .Distinct()
-                                .OrderBy(x => x)
+                            predefinedLabels.Concat(dynamicLabels).Distinct().OrderBy(x => x)
                         );
 
-
-                    }
-
+                        // If you want to fetch comments in parallel too, uncomment this:
+                        var comments = await jiraService.GetIssueCommentsAsync(issue.Key);
+                        issue.Comments = new ObservableCollection<string>(comments);
+                    });
 
                     ApplyCurrentFilters();
 
@@ -582,6 +589,73 @@ namespace IssueManager.Views
             else
             {
                 MessageBox.Show("Please select a Jira project first.", "No Project Selected", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+        private void ImageButton_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            var now = DateTime.Now;
+            var elapsed = (now - _lastClickTime).TotalMilliseconds;
+            _lastClickTime = now;
+
+            if (elapsed < DoubleClickThreshold)
+            {
+                // DOUBLE CLICK detected
+                if (sender is Button btn && btn.Tag is ImageWithIssue imgWithIssue)
+                {
+                    // Your "ristumine" logic, e.g.:
+                    if (imgWithIssue.Issue != null)
+                        OnImageClicked(imgWithIssue.Issue);
+                    e.Handled = true;
+                }
+            }
+        }
+
+        private void ImageButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is ImageWithIssue imgWithIssue)
+            {
+                // Find the full list and index for gallery navigation
+                var issue = imgWithIssue.Issue;
+                var images = issue?.ImageWithIssues?.Select(x => x.Image).OfType<BitmapImage>().ToList() ?? new List<BitmapImage>();
+                int initialIndex = images.IndexOf(imgWithIssue.Image as BitmapImage);
+
+                // Show only if found
+                if (images.Count > 0 && initialIndex >= 0)
+                    ImagePreviewWindow.ShowSingle(images, initialIndex);
+            }
+        }
+        private void PasteImageButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.DataContext is JiraIssue editingIssue)
+            {
+                if (Clipboard.ContainsImage())
+                {
+                    var bmpSource = Clipboard.GetImage();
+                    if (bmpSource != null)
+                    {
+                        var bitmap = new BitmapImage();
+                        using (var ms = new MemoryStream())
+                        {
+                            var encoder = new PngBitmapEncoder();
+                            encoder.Frames.Add(BitmapFrame.Create(bmpSource));
+                            encoder.Save(ms);
+                            ms.Position = 0;
+                            bitmap.BeginInit();
+                            bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                            bitmap.StreamSource = ms;
+                            bitmap.EndInit();
+                        }
+                        editingIssue.AdditionalImages.Add(bitmap);
+                    }
+                }
+            }
+        }
+
+        private void RemoveImageButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is BitmapImage img && btn.DataContext is JiraIssue editingIssue)
+            {
+                editingIssue.AdditionalImages.Remove(img);
             }
         }
 

@@ -630,7 +630,7 @@ namespace IssueManager.Services
     };
 
             if (!string.IsNullOrEmpty(assignee))
-                fields["assignee"] = new { name = assignee };
+                fields["assignee"] = new { accountId = assignee };
 
             if (!string.IsNullOrEmpty(priority))
                 fields["priority"] = new { name = priority };
@@ -810,6 +810,26 @@ namespace IssueManager.Services
             };
         }
 
+        public async Task<bool> UploadAttachmentAsync(string issueKey, Stream stream, string fileName = "Screenshot.png")
+        {
+            using (var client = new HttpClient())
+            {
+                var auth = Convert.ToBase64String(Encoding.ASCII.GetBytes($"{email}:{apiToken}"));
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", auth);
+                client.DefaultRequestHeaders.Add("X-Atlassian-Token", "no-check");
+                client.BaseAddress = new Uri(baseUrl);
+
+                using (var form = new MultipartFormDataContent())
+                {
+                    var fileContent = new StreamContent(stream);
+                    fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse("application/octet-stream");
+                    form.Add(fileContent, "file", fileName);
+
+                    var response = await client.PostAsync($"/rest/api/3/issue/{issueKey}/attachments", form);
+                    return response.IsSuccessStatusCode;
+                }
+            }
+        }
 
 
         public class JiraConfig

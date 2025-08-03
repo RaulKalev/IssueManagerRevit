@@ -35,7 +35,7 @@ namespace IssueManager.Models
         public string CommentsText => Comments != null && Comments.Count > 0
             ? string.Join("\n• ", Comments.Prepend("•"))
             : "—";
-
+        public ObservableCollection<BitmapImage> AdditionalImages { get; set; } = new ObservableCollection<BitmapImage>();
 
         public string Key { get; set; }
         public string Reporter { get; set; }

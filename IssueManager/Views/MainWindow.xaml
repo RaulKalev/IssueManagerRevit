@@ -747,31 +747,11 @@
                                     <StackPanel Grid.Column="0" Margin="0,0,10,0">
                                         <!--  Summary (read-only)  -->
                                         <StackPanel HorizontalAlignment="Left" Orientation="Horizontal">
-                                            <!--  Display Summary when not editing  -->
-                                            <TextBlock
-                                                MinWidth="150"
-                                                MaxWidth="150"
-                                                FontSize="14"
-                                                FontWeight="Bold"
-                                                Foreground="{DynamicResource ForegroundBrush}"
-                                                Text="{Binding Summary}"
-                                                TextWrapping="Wrap"
-                                                Visibility="{Binding IsEditing, Converter={StaticResource InverseBoolToVisibilityConverter}}" />
-
-                                            <!--  Editable Summary TextBox  -->
-                                            <TextBox
-                                                MaxWidth="150"
-                                                Margin="0,2,0,4"
-                                                FontSize="14"
-                                                Style="{DynamicResource CustomTextBoxStyle}"
-                                                Text="{Binding Summary, UpdateSourceTrigger=PropertyChanged}"
-                                                Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibilityConverter}}" />
-
                                             <ToggleButton
                                                 Grid.Column="0"
                                                 Width="19"
                                                 Height="19"
-                                                Margin="10,0,0,0"
+                                                Margin="0,0,5,0"
                                                 Command="{Binding ToggleEditCommand}"
                                                 Content="{Binding IsEditing, Converter={StaticResource BoolToEditSaveConverter}}"
                                                 ToolTip="Muuda">
@@ -807,6 +787,27 @@
                                                     </ControlTemplate>
                                                 </ToggleButton.Template>
                                             </ToggleButton>
+
+                                            <!--  Display Summary when not editing  -->
+                                            <TextBlock
+                                                MinWidth="150"
+                                                MaxWidth="150"
+                                                FontSize="14"
+                                                FontWeight="Bold"
+                                                Foreground="{DynamicResource ForegroundBrush}"
+                                                Text="{Binding Summary}"
+                                                TextWrapping="Wrap"
+                                                Visibility="{Binding IsEditing, Converter={StaticResource InverseBoolToVisibilityConverter}}" />
+
+                                            <!--  Editable Summary TextBox  -->
+                                            <TextBox
+                                                MaxWidth="150"
+                                                Margin="0,2,0,4"
+                                                FontSize="14"
+                                                Style="{DynamicResource CustomTextBoxStyle}"
+                                                Text="{Binding Summary, UpdateSourceTrigger=PropertyChanged}"
+                                                Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibilityConverter}}" />
+
 
 
 
@@ -979,6 +980,53 @@
                                                 Style="{StaticResource DarkThemeComboBox}"
                                                 Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibilityConverter}}" />
                                         </StackPanel>
+                                        <StackPanel
+                                            Margin="0,8,0,0"
+                                            Orientation="Vertical"
+                                            Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibilityConverter}}">
+                                            <TextBlock
+                                                FontStyle="Italic"
+                                                Foreground="Gray"
+                                                Text="Paste or drop images here" />
+
+                                            <Button
+                                                Width="100"
+                                                Margin="0,2,0,2"
+                                                Click="PasteImageButton_Click"
+                                                Content="Paste Image" />
+
+                                            <ItemsControl ItemsSource="{Binding AdditionalImages}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Grid>
+                                                            <Image
+                                                                Width="100"
+                                                                Height="75"
+                                                                Margin="5"
+                                                                Source="{Binding}" />
+                                                            <Button
+                                                                Width="22"
+                                                                Height="22"
+                                                                Margin="0,2,2,0"
+                                                                Padding="0"
+                                                                HorizontalAlignment="Right"
+                                                                VerticalAlignment="Top"
+                                                                Background="Red"
+                                                                BorderThickness="0"
+                                                                Click="RemoveImageButton_Click"
+                                                                Content="✖"
+                                                                Cursor="Hand"
+                                                                FontSize="14"
+                                                                FontWeight="Bold"
+                                                                Foreground="White"
+                                                                Tag="{Binding}" />
+
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+
                                         <ItemsControl ItemsSource="{Binding ImageWithIssues}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
@@ -994,10 +1042,12 @@
                                                         <Button
                                                             Background="Transparent"
                                                             BorderThickness="0"
-                                                            Command="{Binding DataContext.ImageClickCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                            Click="ImageButton_Click"
                                                             CommandParameter="{Binding Issue}"
                                                             Cursor="Hand"
-                                                            ToolTip="Click to apply section box (if available)">
+                                                            PreviewMouseLeftButtonDown="ImageButton_PreviewMouseLeftButtonDown"
+                                                            Tag="{Binding}"
+                                                            ToolTip="Vajuta, et suurendada. Topeltklõps – ristumine">
                                                             <Button.Style>
                                                                 <Style BasedOn="{StaticResource {x:Type Button}}" TargetType="Button">
                                                                     <Setter Property="Background" Value="Transparent" />
