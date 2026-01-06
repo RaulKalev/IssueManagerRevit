@@ -123,9 +123,20 @@ namespace IssueManager.Services
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", auth);
                 client.BaseAddress = new Uri(baseUrl);
 
-                string jql = $"project={projectKey}";
-                var response = await client.GetAsync($"/rest/api/3/search?jql={Uri.EscapeDataString(jql)}&fields=summary,description,assignee,reporter,status,attachment,labels,priority");
+                // Use POST /rest/api/3/search/jql (New replacement for deprecated GET /search)
+                var searchPayload = new
+                {
+                    jql = $"project={projectKey}",
+                    fields = new[] { "summary", "description", "assignee", "reporter", "status", "attachment", "labels", "priority", "created" },
+                    maxResults = 50 
+                };
 
+                var content = new StringContent(
+                    SystemTextJson.JsonSerializer.Serialize(searchPayload),
+                    Encoding.UTF8,
+                    "application/json");
+
+                var response = await client.PostAsync("/rest/api/3/search/jql", content);
                 response.EnsureSuccessStatusCode();
 
                 var json = await response.Content.ReadAsStringAsync();
@@ -445,6 +456,46 @@ namespace IssueManager.Services
             };
         }
 
+        private object CreateBasicADF(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                // Return minimal empty doc
+                return new
+                {
+                    type = "doc",
+                    version = 1,
+                    content = new object[]
+                    {
+                        new { type = "paragraph", content = new object[] { } }
+                    }
+                };
+            }
+
+            // Split by newlines to create multiple paragraphs if needed, or just one block
+            var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            var contentList = new List<object>();
+
+            foreach (var line in lines)
+            {
+                contentList.Add(new
+                {
+                    type = "paragraph",
+                    content = new object[]
+                    {
+                        new { type = "text", text = line }
+                    }
+                });
+            }
+
+            return new
+            {
+                type = "doc",
+                version = 1,
+                content = contentList.ToArray()
+            };
+        }
+
         public async Task<bool> UploadAttachmentAsync(string issueKey, string filePath)
         {
             if (!File.Exists(filePath))
@@ -622,12 +673,12 @@ namespace IssueManager.Services
 
         {
             var fields = new Dictionary<string, object>
-    {
-        { "project", new { key = projectKey } },
-        { "summary", summary },
-        { "description", description },
-        { "issuetype", new { name = "Task" } }
-    };
+            {
+                { "project", new { key = projectKey } },
+                { "summary", summary },
+                { "description", CreateBasicADF(description) }, // Convert text to ADF for v3
+                { "issuetype", new { name = "Task" } }
+            };
 
             if (!string.IsNullOrEmpty(assignee))
                 fields["assignee"] = new { accountId = assignee };
@@ -649,10 +700,16 @@ namespace IssueManager.Services
                 new NewtonsoftJson.JsonSerializerSettings { NullValueHandling = NewtonsoftJson.NullValueHandling.Ignore });
 
             var content = new StringContent(json, Encoding.UTF8, "application/json");
-            var response = await _client.PostAsync($"{_baseUrl}/rest/api/2/issue", content);
+
+            // Use v3 endpoint
+            var response = await _client.PostAsync($"{_baseUrl}/rest/api/3/issue", content);
 
             if (!response.IsSuccessStatusCode)
+            {
+                // Optional: Log or inspect response body for debug
+                // var error = await response.Content.ReadAsStringAsync();
                 return null;
+            }
 
             var responseBody = await response.Content.ReadAsStringAsync();
             using (var doc = JsonDocument.Parse(responseBody))

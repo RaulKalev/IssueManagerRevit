@@ -1,0 +1,28 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\ViewModels\MainViewModel.cs(121,30): warning CS0168: The variable 'ex' is declared but never used [C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\IssueManager.csproj]
+C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\ViewModels\MainViewModel.cs(221,30): warning CS0168: The variable 'ex' is declared but never used [C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\IssueManager.csproj]
+C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\Views\MainWindow.xaml.cs(148,30): warning CS0168: The variable 'ex' is declared but never used [C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\IssueManager.csproj]
+C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\ViewModels\MainViewModel.cs(369,35): warning CS0067: The event 'MainViewModel.RequestShowFilterSettings' is never used [C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\IssueManager.csproj]
+C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\Jira\JiraIssue.cs(27,24): warning CS0169: The field 'JiraIssue.assignee' is never used [C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\IssueManager.csproj]
+C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\Views\FilterSettingsWindow.xaml.cs(14,24): warning CS0414: The field 'FilterSettingsWindow.currentAssigneeFilter' is assigned but its value is never used [C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\IssueManager.csproj]
+C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\Views\FilterSettingsWindow.xaml.cs(15,24): warning CS0414: The field 'FilterSettingsWindow.currentStatusFilter' is assigned but its value is never used [C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\IssueManager.csproj]
+MSBUILD : warning FodyPackageReference: Fody: The package reference for PropertyChanged.Fody does not contain PrivateAssets='All' [C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\IssueManager.csproj]
+MSBUILD : warning FodyPackageReference: Fody: The package reference for Costura.Fody is missing the 'compile' part in the IncludeAssets setting; it's recommended to completely remove IncludeAssets [C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\IssueManager.csproj]
+  IssueManager -> C:\Users\mibil\OneDrive\Desktop\DevDlls\IssueManager\Debug\net48\IssueManager.dll
+
+Build succeeded.
+
+C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\ViewModels\MainViewModel.cs(121,30): warning CS0168: The variable 'ex' is declared but never used [C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\IssueManager.csproj]
+C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\ViewModels\MainViewModel.cs(221,30): warning CS0168: The variable 'ex' is declared but never used [C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\IssueManager.csproj]
+C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\Views\MainWindow.xaml.cs(148,30): warning CS0168: The variable 'ex' is declared but never used [C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\IssueManager.csproj]
+C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\ViewModels\MainViewModel.cs(369,35): warning CS0067: The event 'MainViewModel.RequestShowFilterSettings' is never used [C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\IssueManager.csproj]
+C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\Jira\JiraIssue.cs(27,24): warning CS0169: The field 'JiraIssue.assignee' is never used [C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\IssueManager.csproj]
+C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\Views\FilterSettingsWindow.xaml.cs(14,24): warning CS0414: The field 'FilterSettingsWindow.currentAssigneeFilter' is assigned but its value is never used [C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\IssueManager.csproj]
+C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\Views\FilterSettingsWindow.xaml.cs(15,24): warning CS0414: The field 'FilterSettingsWindow.currentStatusFilter' is assigned but its value is never used [C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\IssueManager.csproj]
+MSBUILD : warning FodyPackageReference: Fody: The package reference for PropertyChanged.Fody does not contain PrivateAssets='All' [C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\IssueManager.csproj]
+MSBUILD : warning FodyPackageReference: Fody: The package reference for Costura.Fody is missing the 'compile' part in the IncludeAssets setting; it's recommended to completely remove IncludeAssets [C:\Users\mibil\Documents\AntigravityGit\IssueManagerRevit\IssueManager\IssueManager.csproj]
+    9 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:01.74

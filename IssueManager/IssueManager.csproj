@@ -3,7 +3,7 @@
 	<PropertyGroup>
 		<TargetFramework>net48</TargetFramework>
 		<UseWPF>true</UseWPF>
-		<BaseOutputPath>C:\Users\mibil\OneDrive\Desktop\DevDlls\IssueManager\New folder</BaseOutputPath>
+		<BaseOutputPath>C:\Users\mibil\OneDrive\Desktop\DevDlls\IssueManager</BaseOutputPath>
 		<PlatformTarget>x64</PlatformTarget>
 	</PropertyGroup>
 
