@@ -16,7 +16,7 @@ namespace IssueManager.Views
         public List<string> SelectedLabels { get; private set; } = new List<string>();
         public List<string> AllLabels { get; set; } = new List<string>();
         private const string WindowKey = "FilterSettingsWindow";
-        public FilterSettingsWindow(List<JiraIssue> allIssues, string currentAssignee, string currentStatus, List<string> selectedLabels, List<string> predefinedLabels = null)
+        public FilterSettingsWindow(List<string> allAssignees, List<string> allStatuses, List<string> allLabels, string currentAssignee, string currentStatus, List<string> selectedLabels)
         {
             InitializeComponent();
             ApplyTheme();
@@ -34,31 +34,8 @@ namespace IssueManager.Views
 
             this.DataContext = this;
 
-            // Build item sources with "All" always first
-            var allAssignees = allIssues
-                .Select(i => i.Assignee)
-                .Where(x => !string.IsNullOrWhiteSpace(x))
-                .Distinct()
-                .OrderBy(x => x)
-                .ToList();
-
-            var allStatuses = allIssues
-                .Select(i => i.StatusCategory)
-                .Where(x => !string.IsNullOrWhiteSpace(x))
-                .Distinct()
-                .OrderBy(x => x)
-                .ToList();
-
-            var issueLabels = allIssues
-                .SelectMany(i => (IEnumerable<string>)(i.Labels ?? new ObservableCollection<string>()))
-                .Where(l => !string.IsNullOrWhiteSpace(l))
-                .Distinct();
-
-            AllLabels = (predefinedLabels ?? new List<string>())
-                .Concat(issueLabels)
-                .Distinct()
-                .OrderBy(x => x)
-                .ToList();
+            // Lists are passed pre-calculated from ViewModel
+            AllLabels = allLabels ?? new List<string>();
 
 
             LabelCheckComboBox.ItemsSource = AllLabels;
@@ -92,19 +69,27 @@ namespace IssueManager.Views
 
         private void ApplyTheme()
         {
-            string themeUri = ThemeManager.IsDarkMode
-                ? "pack://application:,,,/IssueManager;component/Views/Themes/DarkTheme.xaml"
-                : "pack://application:,,,/IssueManager;component/Views/Themes/LightTheme.xaml";
-
             try
             {
-                var dict = new ResourceDictionary
-                {
-                    Source = new Uri(themeUri, UriKind.Absolute)
-                };
+                var mergedDicts = new List<ResourceDictionary>();
 
+                // 1. Restore Material Design
+                mergedDicts.Add(new ResourceDictionary { Source = new Uri("pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesignTheme.ComboBox.xaml") });
+                mergedDicts.Add(new ResourceDictionary { Source = new Uri("pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesignTheme.Dark.xaml") });
+
+                // 2. Add Custom Theme
+                string themeUri = ThemeManager.IsDarkMode
+                    ? "pack://application:,,,/IssueManager;component/Views/Themes/DarkTheme.xaml"
+                    : "pack://application:,,,/IssueManager;component/Views/Themes/LightTheme.xaml";
+
+                mergedDicts.Add(new ResourceDictionary { Source = new Uri(themeUri, UriKind.Absolute) });
+
+                // 3. Apply
                 Resources.MergedDictionaries.Clear();
-                Resources.MergedDictionaries.Add(dict);
+                foreach (var d in mergedDicts)
+                {
+                    Resources.MergedDictionaries.Add(d);
+                }
             }
             catch (Exception ex)
             {

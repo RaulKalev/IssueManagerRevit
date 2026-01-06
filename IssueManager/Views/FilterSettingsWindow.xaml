@@ -5,6 +5,7 @@
     xmlns:local="clr-namespace:IssueManager"
     xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
     xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
+    xmlns:xctk_prim="clr-namespace:Xceed.Wpf.Toolkit.Primitives;assembly=Xceed.Wpf.Toolkit"
     Title="Filter Settings"
     Width="250"
     AllowsTransparency="True"
@@ -21,7 +22,7 @@
                 <!--  Material Design dark theme  -->
                 <ResourceDictionary Source="pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesignTheme.Dark.xaml" />
                 <ResourceDictionary Source="/IssueManager;component/Views/Themes/DarkTheme.xaml" />
-                <ResourceDictionary Source="/IssueManager;component/Views/Themes/LightTheme.xaml" />
+                <!-- Defaulting to Dark Theme in XAML to avoid white flash/override -->
             </ResourceDictionary.MergedDictionaries>
 
 
@@ -128,7 +129,7 @@
                                     <Border
                                         x:Name="PopupBorder"
                                         Width="{Binding ActualWidth, RelativeSource={RelativeSource Mode=TemplatedParent}}"
-                                        Background="{DynamicResource SecondaryBackgroundBrush}"
+                                         Background="#FF292929"
                                         BorderBrush="{TemplateBinding BorderBrush}"
                                         BorderThickness="{TemplateBinding BorderThickness}">
                                         <ScrollViewer Margin="4,6,4,6">
@@ -161,11 +162,43 @@
 
             <Style x:Key="CustomCheckComboBoxStyle" TargetType="xctk:CheckComboBox">
                 <Setter Property="Background" Value="{DynamicResource SecondaryBackgroundBrush}" />
-                <Setter Property="BorderBrush" Value="Gray" />
-                <Setter Property="BorderThickness" Value="0.6" />
+                <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
                 <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}" />
-                <Setter Property="Height" Value="20" />
-                <Setter Property="Padding" Value="4,0,4,0" />
+                <Setter Property="ItemContainerStyle">
+                    <Setter.Value>
+                        <Style TargetType="{x:Type xctk_prim:SelectorItem}">
+                            <Setter Property="Background" Value="Transparent" />
+                            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}" />
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="Padding" Value="4"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="{x:Type xctk_prim:SelectorItem}">
+                                        <Border x:Name="Bd"
+                                                Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                Padding="{TemplateBinding Padding}"
+                                                SnapsToDevicePixels="true">
+                                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                                              SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HighlightBrush}"/>
+                                            </Trigger>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HighlightBrush}"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Setter.Value>
+                </Setter>
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="xctk:CheckComboBox">
@@ -196,7 +229,7 @@
                                     StaysOpen="False">
                                     <Border
                                         Width="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
-                                        Background="{DynamicResource SecondaryBackgroundBrush}"
+                                        Background="#FF292929"
                                         BorderBrush="{TemplateBinding BorderBrush}"
                                         BorderThickness="{TemplateBinding BorderThickness}">
                                         <ScrollViewer>
@@ -530,7 +563,7 @@
         <!--  Inner rounded background container  -->
         <Border
             Margin="2"
-            Background="{DynamicResource PrimaryBackgroundBrush}"
+            Background="Red"
             CornerRadius="10">
             <Grid>
                 <Grid.RowDefinitions>
@@ -558,7 +591,10 @@
                         Margin="0,0,0,5"
                         FontWeight="Bold"
                         Text="Määratud isik:" />
-                    <ComboBox x:Name="AssigneeFilterComboBox" Style="{StaticResource DarkThemeComboBox}" />
+                    <ComboBox x:Name="AssigneeFilterComboBox" 
+                              Background="#FF292929" 
+                              Foreground="White"
+                              Style="{StaticResource DarkThemeComboBox}" />
 
                     <TextBlock
                         Margin="0,10,0,5"
@@ -566,7 +602,6 @@
                         Text="Silt:" />
                     <xctk:CheckComboBox
                         x:Name="LabelCheckComboBox"
-                        Height="20"
                         Margin="0,0,0,0"
                         DisplayMemberPath=""
                         ItemsSource="{Binding AllLabels}"

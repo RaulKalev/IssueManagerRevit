@@ -224,8 +224,8 @@
                                 </Trigger>
                                 <!--  Mouse Over Trigger (Change Background to Red)  -->
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="ToggleButton" Property="Background" Value="Red" />
-                                    <Setter TargetName="ToggleButton" Property="BorderBrush" Value="Red" />
+                                    <Setter TargetName="ToggleButton" Property="Background" Value="{DynamicResource HighlightBrush}" />
+                                    <Setter TargetName="ToggleButton" Property="BorderBrush" Value="{DynamicResource HighlightBrush}" />
                                 </Trigger>
                                 <!--  DropDown Open Trigger  -->
                                 <Trigger Property="IsDropDownOpen" Value="True">

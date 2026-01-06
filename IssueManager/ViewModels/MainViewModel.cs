@@ -18,7 +18,7 @@ using System.Windows.Threading;
 namespace IssueManager.ViewModels
 {
     [PropertyChanged.AddINotifyPropertyChangedInterface]
-    public class MainViewModel
+    public class MainViewModel : System.ComponentModel.INotifyPropertyChanged
     {
         // Constants (moved from View)
         private const string ConfigFilePath = @"C:\ProgramData\RK Tools\IssueManager\config.json";
@@ -30,6 +30,7 @@ namespace IssueManager.ViewModels
         private JiraService jiraService;
         private AppConfig appConfig = new AppConfig();
         private DispatcherTimer autoRefreshTimer;
+        private readonly IDialogService _dialogService;
         private DateTime _lastClickTime = DateTime.MinValue;
 
         // Properties
@@ -55,25 +56,31 @@ namespace IssueManager.ViewModels
         private List<string> currentLabelFilters = new List<string>();
 
         // Commands
-        public ICommand ConnectCommand { get; }
-        public ICommand RefreshCommand { get; }
-        public ICommand CreateTaskCommand { get; }
-        public ICommand FilterCommand { get; }
-        public ICommand ToggleThemeCommand { get; }
-        public ICommand OpenBrowserCommand { get; }
-        public ICommand ImageClickCommand { get; }
-        public ICommand PasteImageCommand { get; }
-        public ICommand RemoveImageCommand { get; }
-        public ICommand MarkDoneCommand { get; }
+        public ICommand ConnectCommand { get; set; }
+        public ICommand RefreshCommand { get; set; }
+        public ICommand CreateTaskCommand { get; set; }
+        public ICommand FilterCommand { get; set; }
+        public ICommand ToggleThemeCommand { get; set; }
+        public ICommand OpenBrowserCommand { get; set; }
+        public ICommand ImageClickCommand { get; set; }
+        public ICommand PasteImageCommand { get; set; }
+        public ICommand RemoveImageCommand { get; set; }
+        public ICommand MarkDoneCommand { get; set; }
 
-        // Events/Delegates for UI interactions that VM can't handle directly (e.g. showing windows)
-        public Action RequestClose { get; set; }
-        public Action<List<string>, List<string>, List<string>> RequestFilterWindow { get; set; } // <assignees, statuses, labels>
-        public Action<JiraService, string, List<string>, List<string>, List<string>, List<JiraIssue>, Action<JiraIssue>> RequestCreateTaskWindow { get; set; }
-        public Action RequestThemeLoad { get; set; }
-        public Action RequestCredentialsWindow { get; set; }
+        public event System.ComponentModel.PropertyChangedEventHandler PropertyChanged;
+
+
 
         public MainViewModel()
+        {
+            _dialogService = new DialogService(); // Default implementation
+            InitializeCommands();
+            LoadConfig();
+            ThemeManager.IsDarkMode = IsDarkMode;
+            InitializeAutoRefreshTimer();
+        }
+
+        private void InitializeCommands()
         {
             ConnectCommand = new RelayCommand<object>(async _ => await ConnectToJira());
             RefreshCommand = new RelayCommand<object>(async _ => await RefreshIssues());
@@ -88,10 +95,6 @@ namespace IssueManager.ViewModels
             RemoveImageCommand = new RelayCommand<object>(OnRemoveImage); // Object because it might need tuple of (Issue, Image)
             
             MarkDoneCommand = new RelayCommand<JiraIssue>(async issue => await MarkIssueDone(issue));
-
-            LoadConfig();
-            ThemeManager.IsDarkMode = IsDarkMode;
-            InitializeAutoRefreshTimer();
         }
 
         private void InitializeAutoRefreshTimer()
@@ -161,7 +164,7 @@ namespace IssueManager.ViewModels
 
                 if (!File.Exists(JiraConfigPath))
                 {
-                    RequestCredentialsWindow?.Invoke();
+                    _dialogService.ShowCredentials(JiraConfigPath, () => { _ = ConnectToJira(); });
                     IsLoading = false;
                     return;
                 }
@@ -171,7 +174,7 @@ namespace IssueManager.ViewModels
 
                 if (string.IsNullOrWhiteSpace(config?.email) || string.IsNullOrWhiteSpace(config?.apiToken))
                 {
-                    RequestCredentialsWindow?.Invoke();
+                    _dialogService.ShowCredentials(JiraConfigPath, () => { _ = ConnectToJira(); });
                     IsLoading = false;
                     return;
                 }
@@ -183,7 +186,7 @@ namespace IssueManager.ViewModels
                 {
                     ConnectionStatusIconKind = MaterialDesignThemes.Wpf.PackIconKind.AlertCircle;
                     ConnectionStatusForeground = Brushes.Red;
-                    RequestCredentialsWindow?.Invoke();
+                    _dialogService.ShowCredentials(JiraConfigPath, () => { _ = ConnectToJira(); });
                     IsLoading = false;
                     return;
                 }
@@ -198,7 +201,7 @@ namespace IssueManager.ViewModels
                 JiraIssue.UpdateCallback = async (issue) =>
                 {
                      bool result = await jiraService.UpdateIssueAsync(issue);
-                     if (!result) MessageBox.Show($"Failed to update issue: {issue.Key}");
+                     if (!result) _dialogService.ShowMessage($"Failed to update issue: {issue.Key}", "Error");
                      return result;
                 };
                 JiraIssue.FilterCallback = ApplyCurrentFilters;
@@ -303,7 +306,7 @@ namespace IssueManager.ViewModels
         {
             if (SelectedProject == null)
             {
-                MessageBox.Show("Please select a project first.");
+                _dialogService.ShowMessage("Please select a project first.", "Warning");
                 return;
             }
             
@@ -322,7 +325,7 @@ namespace IssueManager.ViewModels
             // Request View to open window
             // Since we can't easily pass the callback through pure events without a service, 
             // we'll rely on the simplified Action delegate pattern for now.
-             RequestCreateTaskWindow?.Invoke(
+            _dialogService.ShowCreateTask(
                 jiraService,
                 SelectedProject.key,
                 projectKeys,
@@ -344,35 +347,28 @@ namespace IssueManager.ViewModels
         {
             if (allLoadedIssues == null || allLoadedIssues.Count == 0) return;
             
-            // This is a bit tricky with pure MVVM without a DialogService.
-            // We will fire an event that the View listens to.
-            // For simplicity in this refactor, we are using the Action delegate exposed above.
-            
-            // But FilterSettingsWindow needs specific arguments. 
-            // We'll let the View handle the instantiation if we pass the data.
-            // However, the View needs `allLoadedIssues`. 
-            // Let's assume the View can access ViewModel.allLoadedIssues if needed, or we pass it.
-            // Actually, we can just expose the current filters and let the view do the rest?
-            // No, the window logic is complex. 
-            // We will trigger the event.
-            // Wait, the View Code-Behind for `FilterButton_Click` did everything.
-            // We will have the View subscribe to `RequestFilterWindow`?
-            // But `RequestFilterWindow` needs return values.
-            // The simplest approach for this "Refactor" step is to keep the Dialog logic in the View 
-            // but trigger it from the ViewModel, or (easier) bind the Button to a Command in the VM 
-            // that fires an event, OR just keep the Button Click in the View for the Dialog parts 
-            // if we want to be pragmatic.
-            // BUT, the goal is MVVM.
-            // I will implement a `RequestShowFilterSettings` event.
-        }
+            var cachedAssigneesForProj = cachedAssignees.ContainsKey(SelectedProject.key) ? cachedAssignees[SelectedProject.key].Select(u => u.DisplayName).ToList() : new List<string>();
+            var cachedStatuses = allLoadedIssues.Select(i => i.StatusCategory).Distinct().ToList();
+            var cachedLabels = predefinedLabels.ToList();
 
-        public event EventHandler RequestShowFilterSettings;
+            _dialogService.ShowFilterSettings(cachedAssigneesForProj, cachedStatuses, cachedLabels, currentAssigneeFilter, currentStatusFilter, currentLabelFilters, (a, s, l) => 
+            {
+                currentAssigneeFilter = a;
+                currentStatusFilter = s;
+                currentLabelFilters = l;
+                ApplyCurrentFilters();
+            });
+        }
 
         private void ToggleTheme()
         {
             IsDarkMode = !IsDarkMode;
             ThemeManager.IsDarkMode = IsDarkMode;
-            RequestThemeLoad?.Invoke();
+            IsDarkMode = !IsDarkMode;
+            ThemeManager.IsDarkMode = IsDarkMode;
+            // No need to request RequestThemeLoad() as ThemeManager handles global theme application usually, 
+            // or we might need to notify something. Assuming ThemeManager handles it.
+            // RequestThemeLoad?.Invoke();
             SaveConfig();
         }
         
@@ -448,7 +444,7 @@ namespace IssueManager.ViewModels
             }
             else
             {
-                MessageBox.Show($"Failed to mark issue {issue.Key} as Done.");
+                _dialogService.ShowMessage($"Failed to mark issue {issue.Key} as Done.", "Error");
             }
         }
 
